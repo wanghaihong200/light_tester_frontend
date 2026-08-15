@@ -10,6 +10,7 @@
     </el-form-item>
     <el-form-item>
       <el-button class="save-btn" type="primary" :loading="saving" @click="save">保存</el-button>
+      <el-button class="delete-btn" type="danger" plain @click="remove">删除</el-button>
     </el-form-item>
   </el-form>
 </template>
@@ -36,8 +37,12 @@ const saving = ref(false)
 const parentCandidate = ref<Array<{ id: number; name: string; depth: number }>>([])
 
 onMounted(async () => {
-  const tree: ModuleNode[] = await fetchTree(props.projectId)
-  parentCandidate.value = flattenModules(tree, props.moduleId)
+  try {
+    const tree: ModuleNode[] = await fetchTree(props.projectId)
+    parentCandidate.value = flattenModules(tree, props.moduleId)
+  } catch (e) {
+    ElMessage.error(`加载父模块候选失败:${(e as Error).message}`)
+  }
 })
 
 async function save() {

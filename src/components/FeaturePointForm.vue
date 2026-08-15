@@ -5,6 +5,7 @@
     </el-form-item>
     <el-form-item>
       <el-button class="save-btn" type="primary" :loading="saving" @click="save">保存</el-button>
+      <el-button class="delete-btn" type="danger" plain @click="remove">删除</el-button>
     </el-form-item>
   </el-form>
 </template>

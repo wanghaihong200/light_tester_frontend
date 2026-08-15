@@ -74,10 +74,10 @@ function onNodeActive(payload: { nodeType: NodeType; refId?: number }) {
 }
 
 function findModuleMeta(root: MindmapNode | null, refId: number): { name: string; parentId: number | null } {
-  // 从导图树回查:遍历 module 节点,记录父 refId
+  // 从导图树回查:遍历 module/feature 节点,记录父 refId
   let result: { name: string; parentId: number | null } = { name: '', parentId: null }
   function walk(node: MindmapNode, parentRefId: number | null) {
-    if (node.data.nodeType === 'module' && node.data.refId === refId) {
+    if ((node.data.nodeType === 'module' || node.data.nodeType === 'feature') && node.data.refId === refId) {
       result = { name: node.data.text, parentId: parentRefId }
       return
     }
