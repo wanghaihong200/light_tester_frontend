@@ -61,4 +61,7 @@ onMounted(async () => {
 .tabs :deep(.el-tabs__content) {
   flex: 1;
 }
+.tabs :deep(.el-tab-pane) {
+  height: 100%;
+}
 </style>
