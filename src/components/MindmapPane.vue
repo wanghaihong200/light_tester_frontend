@@ -25,6 +25,13 @@
         @saved="onSaved"
         @deleted="onDeleted"
       />
+      <CaseForm
+        v-else-if="selected?.nodeType === 'case'"
+        :key="selected.refId"
+        :case-id="selected.refId!"
+        @saved="onSaved"
+        @deleted="onDeleted"
+      />
     </el-drawer>
   </div>
 </template>
@@ -37,6 +44,7 @@ import { fetchTree } from '../api/tree'
 import MindmapEditor from './MindmapEditor.vue'
 import ModuleForm from './ModuleForm.vue'
 import FeaturePointForm from './FeaturePointForm.vue'
+import CaseForm from './CaseForm.vue'
 
 const props = defineProps<{ projectId: number; projectName: string }>()
 
@@ -61,11 +69,11 @@ const selectedMeta = ref<{ name: string; parentId: number | null }>({ name: '', 
 const drawerVisible = ref(false)
 
 const drawerTitle = computed(() =>
-  selected.value?.nodeType === 'module' ? '编辑模块' : selected.value?.nodeType === 'feature' ? '编辑功能点' : '编辑',
+  selected.value?.nodeType === 'module' ? '编辑模块' : selected.value?.nodeType === 'feature' ? '编辑功能点' : selected.value?.nodeType === 'case' ? '编辑用例' : '编辑',
 )
 
 function onNodeActive(payload: { nodeType: NodeType; refId?: number }) {
-  if (payload.nodeType === 'root' || payload.nodeType === 'case') return // case 在 Task 7 接入
+  if (payload.nodeType === 'root') return
   selected.value = payload
   // 从当前树数据里找到该节点名称与父模块(只用于表单初值)
   const found = findModuleMeta(mindmapData.value, payload.refId!)
