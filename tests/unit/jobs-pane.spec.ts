@@ -36,7 +36,6 @@ const jobsApi = vi.hoisted(() => {
         error: null,
         created_at: '2026-08-15T10:00:00',
         document_name: 'API文档.md',
-        staged_count: 15,
       },
     ]),
     createJob: vi.fn().mockResolvedValue({
