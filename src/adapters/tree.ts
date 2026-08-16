@@ -52,6 +52,25 @@ export function canAddChild(nodeType: NodeType): Array<'module' | 'feature' | 'c
   return []
 }
 
+export interface NodeMeta {
+  name: string
+  parentId: number | null
+}
+
+/** 从导图树回查节点名称与父模块 refId(仅模块/功能点;用例 text 带优先级前缀,不走此查询) */
+export function findNodeMeta(root: MindmapNode | null, refId: number): NodeMeta {
+  let result: NodeMeta = { name: '', parentId: null }
+  function walk(node: MindmapNode, parentRefId: number | null) {
+    if ((node.data.nodeType === 'module' || node.data.nodeType === 'feature') && node.data.refId === refId) {
+      result = { name: node.data.text, parentId: parentRefId }
+      return
+    }
+    node.children.forEach((c) => walk(c, node.data.nodeType === 'module' ? (node.data.refId ?? null) : parentRefId))
+  }
+  if (root) walk(root, null)
+  return result
+}
+
 /** 拍平模块树供下拉选择;excludeSubtreeOf 排除该模块及其整个子树(移动模块时防自嵌套) */
 export function flattenModules(modules: ModuleNode[], excludeSubtreeOf?: number): Array<{ id: number; name: string; depth: number }> {
   const out: Array<{ id: number; name: string; depth: number }> = []

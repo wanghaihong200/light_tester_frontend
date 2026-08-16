@@ -2,7 +2,7 @@
   <div class="project-view">
     <div class="header">
       <el-button @click="$router.push('/')">← 项目列表</el-button>
-      <h3 style="margin: 0 12px">{{ project?.name ?? '加载中…' }}</h3>
+      <h3 style="margin: 0 12px">{{ project?.name ?? (loaded ? '项目不存在' : '加载中…') }}</h3>
       <span v-if="project?.description" style="color: #909399">{{ project.description }}</span>
     </div>
     <el-tabs v-model="tab" class="tabs">
@@ -27,6 +27,7 @@ import type { Project } from '../types'
 
 const route = useRoute()
 const project = ref<Project | null>(null)
+const loaded = ref(false)
 const tab = ref('mindmap')
 
 onMounted(async () => {
@@ -37,6 +38,8 @@ onMounted(async () => {
     if (!project.value) ElMessage.error('项目不存在')
   } catch (e) {
     ElMessage.error(`加载项目失败:${(e as Error).message}`)
+  } finally {
+    loaded.value = true
   }
 })
 </script>

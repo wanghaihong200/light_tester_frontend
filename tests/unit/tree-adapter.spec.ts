@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canAddChild, caseLabel, flattenModules, toMindmapData } from '../../src/adapters/tree'
+import { canAddChild, caseLabel, findNodeMeta, flattenModules, toMindmapData } from '../../src/adapters/tree'
 
 const tree = [
   {
@@ -68,5 +68,30 @@ describe('caseLabel / canAddChild / flattenModules', () => {
     expect(flat.map((m) => m.name)).toEqual(['订单模块'])
     const all = flattenModules(tree as never)
     expect(all.map((m) => m.depth)).toEqual([0, 0, 1])
+  })
+})
+
+describe('findNodeMeta', () => {
+  const root = toMindmapData('商城系统', tree)
+
+  it('查模块:名称+父(顶层为 null)', () => {
+    const m1 = findNodeMeta(root, 1)
+    expect(m1).toEqual({ name: '登录模块', parentId: null })
+    const m3 = findNodeMeta(root, 3)
+    expect(m3).toEqual({ name: '子模块A', parentId: 1 })
+  })
+
+  it('查功能点:名称+所属模块', () => {
+    expect(findNodeMeta(root, 10)).toEqual({ name: '账号登录', parentId: 3 })
+    expect(findNodeMeta(root, 11)).toEqual({ name: '扫码登录', parentId: 1 })
+  })
+
+  it('查用例/不存在:返回哨兵(用例 text 带前缀,设计上不走此查询)', () => {
+    expect(findNodeMeta(root, 100)).toEqual({ name: '', parentId: null })
+    expect(findNodeMeta(root, 99999)).toEqual({ name: '', parentId: null })
+  })
+
+  it('null 树返回哨兵', () => {
+    expect(findNodeMeta(null, 1)).toEqual({ name: '', parentId: null })
   })
 })

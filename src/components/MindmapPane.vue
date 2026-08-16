@@ -70,7 +70,7 @@
 <script setup lang="ts">
 import { ElMessage } from 'element-plus'
 import { computed, onMounted, ref } from 'vue'
-import { canAddChild, toMindmapData, type MindmapNode, type NodeType } from '../adapters/tree'
+import { canAddChild, findNodeMeta, toMindmapData, type MindmapNode, type NodeType } from '../adapters/tree'
 import { createCase } from '../api/cases'
 import { createFeaturePoint, createModule, fetchTree } from '../api/tree'
 import type { Priority } from '../types'
@@ -109,24 +109,11 @@ function onNodeActive(payload: { nodeType: NodeType; refId?: number }) {
   if (payload.nodeType === 'root') return
   selected.value = payload
   // 从当前树数据里找到该节点名称与父模块(只用于表单初值)
-  const found = findModuleMeta(mindmapData.value, payload.refId!)
+  const found = findNodeMeta(mindmapData.value, payload.refId!)
   selectedMeta.value = found
   drawerVisible.value = true
 }
 
-function findModuleMeta(root: MindmapNode | null, refId: number): { name: string; parentId: number | null } {
-  // 从导图树回查:遍历 module/feature 节点,记录父 refId
-  let result: { name: string; parentId: number | null } = { name: '', parentId: null }
-  function walk(node: MindmapNode, parentRefId: number | null) {
-    if ((node.data.nodeType === 'module' || node.data.nodeType === 'feature') && node.data.refId === refId) {
-      result = { name: node.data.text, parentId: parentRefId }
-      return
-    }
-    node.children.forEach((c) => walk(c, node.data.nodeType === 'module' ? (node.data.refId ?? null) : parentRefId))
-  }
-  if (root) walk(root, null)
-  return result
-}
 
 function onSaved() {
   void load() // 保存后整树刷新,选中高亮丢失属 MVP 已接受行为
