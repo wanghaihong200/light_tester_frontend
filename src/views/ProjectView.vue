@@ -12,6 +12,9 @@
       <el-tab-pane label="文档库" name="documents">
         <DocumentsPane v-if="project" :project-id="project.id" />
       </el-tab-pane>
+      <el-tab-pane label="生成任务" name="jobs">
+        <JobsPane v-if="project" :project-id="project.id" />
+      </el-tab-pane>
     </el-tabs>
   </div>
 </template>
@@ -21,6 +24,7 @@ import { ElMessage } from 'element-plus'
 import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import DocumentsPane from '../components/DocumentsPane.vue'
+import JobsPane from '../components/JobsPane.vue'
 import MindmapPane from '../components/MindmapPane.vue'
 import { listProjects } from '../api/projects'
 import type { Project } from '../types'
