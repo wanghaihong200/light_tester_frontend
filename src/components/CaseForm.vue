@@ -98,7 +98,13 @@ async function save() {
       remark: form.remark || null,
       steps: form.steps.map((s) => ({ action: s.action.trim(), expected: s.expected.trim() })),
     })
-    await patchExecution(props.caseId, execution.value) // 执行结果独立接口(后端契约)
+    try {
+      await patchExecution(props.caseId, execution.value) // 执行结果独立接口(后端契约)
+    } catch (e2) {
+      ElMessage.error(`内容已保存,但执行结果保存失败:${(e2 as Error).message}`)
+      emit('saved') // 内容已落库,父级刷新合理
+      return
+    }
     ElMessage.success('已保存')
     emit('saved')
   } catch (e) {

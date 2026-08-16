@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
+import ElementPlus, { ElMessage } from 'element-plus'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const api = vi.hoisted(() => ({
@@ -78,5 +78,19 @@ describe('CaseForm', () => {
     await wrapper.find('button.save-btn').trigger('click')
     await flushPromises()
     expect(api.patchExecution).toHaveBeenCalledWith(100, null)
+  })
+
+  it('执行结果保存失败时提示内容已保存', async () => {
+    api.patchExecution.mockRejectedValueOnce(new Error('x'))
+    const errorSpy = vi.spyOn(ElMessage, 'error')
+    const wrapper = mountForm()
+    await flushPromises()
+    await wrapper.find('button.save-btn').trigger('click')
+    await flushPromises()
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('内容已保存,但执行结果保存失败'),
+    )
+    expect(wrapper.emitted('saved')).toBeTruthy()
+    errorSpy.mockRestore()
   })
 })

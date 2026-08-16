@@ -4,6 +4,7 @@
       <el-button type="primary" @click="openAdd('module', selected ?? { nodeType: 'root' })">+ 模块</el-button>
       <el-button @click="load" :loading="loading">刷新</el-button>
       <el-button @click="exportXmind">导出 .xmind</el-button>
+      <el-button @click="exportExcel">导出 Excel</el-button>
       <span class="hint">选中节点后在侧边编辑;空项目请先建根模块</span>
     </div>
     <div class="canvas-area">
@@ -187,6 +188,10 @@ async function submitAdd() {
 
 function exportXmind() {
   window.open(`/api/projects/${props.projectId}/export/xmind`) // dev 下走 vite proxy,Disposition 触发下载
+}
+
+function exportExcel() {
+  window.open(`/api/projects/${props.projectId}/export/excel`) // dev 下走 vite proxy,Disposition 触发下载
 }
 </script>
 
