@@ -59,3 +59,50 @@ export interface CaseUpsert {
   remark?: string | null
   steps: { action: string; expected: string }[]
 }
+
+// 任务与暂存区相关类型
+export type JobStatus = 'pending' | 'running' | 'completed' | 'failed'
+
+export interface GenerationJob {
+  id: number
+  project_id: number
+  document_id: number
+  target_module_id: number
+  job_type: string
+  status: JobStatus
+  model: string
+  input_tokens: number
+  output_tokens: number
+  cost_usd: number
+  error: string | null
+  created_at: string
+  document_name: string | null
+}
+
+export interface StagedCaseItem {
+  id: number
+  job_id: number
+  feature_point_name: string
+  title: string
+  priority: Priority
+  precondition: string | null
+  remark: string | null
+  steps: { action: string; expected: string }[]
+  created_at: string
+}
+
+export interface StagingGroup {
+  feature_point_name: string
+  cases: StagedCaseItem[]
+}
+
+export interface StagingResponse {
+  job_id: number
+  groups: StagingGroup[]
+}
+
+export type SSEEvent =
+  | { type: 'status'; status: JobStatus }
+  | { type: 'delta'; text: string }
+  | { type: 'done'; staged_count: number }
+  | { type: 'error'; message: string }
