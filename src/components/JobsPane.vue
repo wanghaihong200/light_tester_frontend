@@ -158,7 +158,7 @@ function onEvent(e: SSEEvent) {
   } else if (e.type === 'done') {
     drawerStatus.value = 'completed'
     const doneJob = jobs.value.find(j => j.id === drawerJob.value!.id)
-    if (doneJob) { doneJob.status = 'completed'; doneJob.staged_count = e.staged_count }
+    if (doneJob) { doneJob.status = 'completed' }
     drawerStream.value += `完成,共 ${e.staged_count} 条暂存用例\n`
     ElMessage.success(`任务完成,共 ${e.staged_count} 条暂存用例`)
     disconnectSSE()
