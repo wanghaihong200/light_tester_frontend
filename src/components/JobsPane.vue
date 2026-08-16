@@ -157,11 +157,15 @@ function onEvent(e: SSEEvent) {
     drawerStream.value += e.text
   } else if (e.type === 'done') {
     drawerStatus.value = 'completed'
+    const doneJob = jobs.value.find(j => j.id === drawerJob.value!.id)
+    if (doneJob) { doneJob.status = 'completed'; doneJob.staged_count = e.staged_count }
     drawerStream.value += `完成,共 ${e.staged_count} 条暂存用例\n`
     ElMessage.success(`任务完成,共 ${e.staged_count} 条暂存用例`)
     disconnectSSE()
   } else if (e.type === 'error') {
     drawerStatus.value = 'failed'
+    const errJob = jobs.value.find(j => j.id === drawerJob.value!.id)
+    if (errJob) { errJob.status = 'failed'; errJob.error = e.message }
     ElMessage.error(e.message)
     disconnectSSE()
   }
@@ -190,7 +194,6 @@ async function submitCreate() {
 
 // Task 9: 打开暂存区面板
 function openStagingPlaceholder() {
-  // Task 9: 打开暂存区面板
 }
 
 onBeforeUnmount(() => {

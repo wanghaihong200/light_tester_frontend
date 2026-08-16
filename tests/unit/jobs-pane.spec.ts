@@ -140,6 +140,8 @@ describe('JobsPane', () => {
 
     // 抽屉应打开且显示终态信息
     expect(wrapper.find('.el-drawer').exists()).toBe(true)
+    // 抽屉文本应包含 DB 状态(已完成)
+    expect(wrapper.text()).toContain('已完成')
     // 终态任务不应调用 subscribeJobEvents
     expect(jobsApi.subscribeJobEvents).not.toHaveBeenCalled()
   })
