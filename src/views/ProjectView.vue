@@ -7,13 +7,13 @@
     </div>
     <el-tabs v-model="tab" class="tabs">
       <el-tab-pane label="用例导图" name="mindmap">
-        <MindmapPane v-if="project" :project-id="project.id" :project-name="project.name" />
+        <MindmapPane v-if="project" :key="mindmapKey" :project-id="project.id" :project-name="project.name" />
       </el-tab-pane>
       <el-tab-pane label="文档库" name="documents">
         <DocumentsPane v-if="project" :project-id="project.id" />
       </el-tab-pane>
       <el-tab-pane label="生成任务" name="jobs">
-        <JobsPane v-if="project" :project-id="project.id" />
+        <JobsPane v-if="project" :project-id="project.id" @staging-accepted="mindmapKey++" />
       </el-tab-pane>
     </el-tabs>
   </div>
@@ -33,6 +33,7 @@ const route = useRoute()
 const project = ref<Project | null>(null)
 const loaded = ref(false)
 const tab = ref('mindmap')
+const mindmapKey = ref(0)
 
 onMounted(async () => {
   try {

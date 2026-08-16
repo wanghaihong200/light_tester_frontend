@@ -22,7 +22,7 @@
       <el-table-column label="操作" width="160">
         <template #default="{ row }">
           <el-button size="small" @click="openDrawer(row)">进度</el-button>
-          <el-button v-if="row.status === 'completed'" size="small" @click="openStagingPlaceholder">暂存区</el-button>
+          <el-button v-if="row.status === 'completed'" size="small" @click="openStaging(row)">暂存区</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -55,6 +55,16 @@
         <pre v-if="drawerStream" class="stream-output">{{ drawerStream }}</pre>
       </div>
     </el-drawer>
+
+    <!-- 暂存区抽屉 -->
+    <el-drawer v-model="stagingDrawer" title="暂存区" size="70%">
+      <StagingPane
+        v-if="stagingDrawer"
+        :job-id="stagingJobId"
+        @close="stagingDrawer = false"
+        @accepted="onStagingAccepted"
+      />
+    </el-drawer>
   </div>
 </template>
 
@@ -65,9 +75,12 @@ import { createJob, listJobs, subscribeJobEvents } from '../api/jobs'
 import { listDocuments } from '../api/documents'
 import { fetchTree } from '../api/tree'
 import { flattenModules } from '../adapters/tree'
+import StagingPane from './StagingPane.vue'
 import type { DocumentItem, GenerationJob, JobStatus, ModuleNode, SSEEvent } from '../types'
 
 const props = defineProps<{ projectId: number }>()
+
+const emit = defineEmits<{ (e: 'staging-accepted'): void }>()
 
 const jobs = ref<GenerationJob[]>([])
 const documents = ref<DocumentItem[]>([])
@@ -85,6 +98,9 @@ const drawerJob = ref<GenerationJob | null>(null)
 const drawerStatus = ref<JobStatus>('pending')
 const drawerStream = ref('')
 const closeSSE = ref<(() => void) | null>(null)
+
+const stagingDrawer = ref(false)
+const stagingJobId = ref(0)
 
 const statusMap: Record<JobStatus, string> = { pending: '待执行', running: '执行中', completed: '已完成', failed: '失败' }
 const tagMap: Record<JobStatus, string> = { pending: 'info', running: 'warning', completed: 'success', failed: 'danger' }
@@ -193,7 +209,13 @@ async function submitCreate() {
 }
 
 // Task 9: 打开暂存区面板
-function openStagingPlaceholder() {
+function openStaging(job: GenerationJob) {
+  stagingJobId.value = job.id
+  stagingDrawer.value = true
+}
+
+function onStagingAccepted() {
+  emit('staging-accepted')
 }
 
 onBeforeUnmount(() => {
