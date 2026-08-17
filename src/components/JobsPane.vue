@@ -30,6 +30,12 @@
     <!-- 发起对话框 -->
     <el-dialog v-model="dialogVisible" title="发起生成任务" width="480">
       <el-form label-width="80px">
+        <el-form-item label="任务类型">
+          <el-radio-group v-model="jobType">
+            <el-radio value="case_generation">用例生成</el-radio>
+            <el-radio value="api_generation">接口生成</el-radio>
+          </el-radio-group>
+        </el-form-item>
         <el-form-item label="文档">
           <el-select v-model="selectedDocId" placeholder="选择文档" style="width: 100%">
             <el-option v-for="d in documents" :key="d.id" :label="d.filename" :value="d.id" />
@@ -51,6 +57,7 @@
     <el-drawer v-model="drawerVisible" :title="'任务 #' + (drawerJob?.id ?? '') + ' 进度'" size="50%" @close="onDrawerClose">
       <div v-if="drawerJob">
         <p>状态: <el-tag :type="statusTagType(drawerStatus)">{{ statusText(drawerStatus) }}</el-tag></p>
+        <p v-if="stageText" class="stage-text">{{ stageText }}</p>
         <p v-if="drawerJob.error">{{ drawerJob.error }}</p>
         <pre v-if="drawerStream" class="stream-output">{{ drawerStream }}</pre>
       </div>
@@ -76,9 +83,9 @@ import { listDocuments } from '../api/documents'
 import { fetchTree } from '../api/tree'
 import { flattenModules } from '../adapters/tree'
 import StagingPane from './StagingPane.vue'
-import type { DocumentItem, GenerationJob, JobStatus, ModuleNode, SSEEvent } from '../types'
+import type { DocumentItem, GenerationJob, JobStatus, ModuleNode, Project, SSEEvent } from '../types'
 
-const props = defineProps<{ projectId: number }>()
+const props = defineProps<{ projectId: number; project?: Project | null }>()
 
 const emit = defineEmits<{ (e: 'staging-accepted'): void }>()
 
@@ -92,11 +99,13 @@ const dialogVisible = ref(false)
 const selectedDocId = ref<number | null>(null)
 const selectedModId = ref<number | null>(null)
 const submitting = ref(false)
+const jobType = ref<'case_generation' | 'api_generation'>('case_generation')
 
 const drawerVisible = ref(false)
 const drawerJob = ref<GenerationJob | null>(null)
 const drawerStatus = ref<JobStatus>('pending')
 const drawerStream = ref('')
+const stageText = ref('')
 const closeSSE = ref<(() => void) | null>(null)
 
 const stagingDrawer = ref(false)
@@ -152,6 +161,7 @@ function openDrawer(job: GenerationJob) {
   drawerJob.value = job
   drawerStatus.value = job.status
   drawerStream.value = ''
+  stageText.value = ''
   drawerVisible.value = true
   if (job.status !== 'completed' && job.status !== 'failed') {
     const close = subscribeJobEvents(job.id, onEvent)
@@ -171,12 +181,23 @@ function onEvent(e: SSEEvent) {
     if (job) job.status = e.status
   } else if (e.type === 'delta') {
     drawerStream.value += e.text
+  } else if (e.type === 'stage') {
+    if (e.stage === 'compiling') stageText.value = '编译中…'
+    else if (e.stage === 'fixing') stageText.value = `修复第 ${e.round ?? 1} 轮…`
   } else if (e.type === 'done') {
     drawerStatus.value = 'completed'
     const doneJob = jobs.value.find(j => j.id === drawerJob.value!.id)
     if (doneJob) { doneJob.status = 'completed' }
-    drawerStream.value += `完成,共 ${e.staged_count} 条暂存用例\n`
-    ElMessage.success(`任务完成,共 ${e.staged_count} 条暂存用例`)
+    if (e.files_count !== undefined) {
+      stageText.value = `生成 ${e.files_count} 个文件`
+      drawerStream.value += `完成,共 ${e.files_count} 个文件\n`
+      ElMessage.success(`任务完成,共 ${e.files_count} 个文件`)
+    } else {
+      const cnt = e.staged_count ?? 0
+      stageText.value = `生成 ${cnt} 条暂存用例`
+      drawerStream.value += `完成,共 ${cnt} 条暂存用例\n`
+      ElMessage.success(`任务完成,共 ${cnt} 条暂存用例`)
+    }
     loadJobs() // 刷新 tokens/费用等终值(本地只同步过状态)
     disconnectSSE()
   } else if (e.type === 'error') {
@@ -190,16 +211,22 @@ function onEvent(e: SSEEvent) {
 
 async function submitCreate() {
   if (!selectedDocId.value || !selectedModId.value) return
+  if (jobType.value === 'api_generation' && !props.project?.git_repo_url) {
+    ElMessage.error('请先配置 git_repo_url')
+    return
+  }
   submitting.value = true
   try {
     const newJob = await createJob(props.projectId, {
       documentId: selectedDocId.value,
       targetModuleId: selectedModId.value,
+      jobType: jobType.value,
     })
     ElMessage.success('已发起生成任务')
     dialogVisible.value = false
     selectedDocId.value = null
     selectedModId.value = null
+    jobType.value = 'case_generation'
     await loadJobs()
     openDrawer(newJob)
   } catch (e) {
@@ -243,5 +270,9 @@ onBeforeUnmount(() => {
   font-size: 13px;
   max-height: 400px;
   overflow-y: auto;
+}
+.stage-text {
+  color: #e6a23c;
+  font-weight: 500;
 }
 </style>

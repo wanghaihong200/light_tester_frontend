@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi, beforeEach } from 'vitest'
 
 // ---- mock api modules ----
 const jobsApi = vi.hoisted(() => {
@@ -78,6 +78,10 @@ vi.mock('../../src/api/tree', () => treeApi)
 import JobsPane from '../../src/components/JobsPane.vue'
 
 describe('JobsPane', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   it('加载并渲染任务列表', async () => {
     const wrapper = mount(JobsPane, { props: { projectId: 1 }, global: { plugins: [ElementPlus] } })
     await flushPromises()
@@ -118,9 +122,77 @@ describe('JobsPane', () => {
     }
     await flushPromises()
 
-    expect(jobsApi.createJob).toHaveBeenCalledWith(1, { documentId: 3, targetModuleId: 5 })
+    // 默认任务类型 case_generation → createJob payload 带 jobType
+    expect(jobsApi.createJob).toHaveBeenCalledWith(1, { documentId: 3, targetModuleId: 5, jobType: 'case_generation' })
     // 自动打开该任务的进度抽屉 → subscribeJobEvents 被调用
     expect(jobsApi.subscribeJobEvents).toHaveBeenCalledWith(11, expect.any(Function))
+  })
+
+  it('api_generation 无 git_repo_url 时 toast 不发请求', async () => {
+    const wrapper = mount(JobsPane, {
+      props: { projectId: 1, project: { id: 1, name: 'p', git_repo_url: null } as any },
+      global: { plugins: [ElementPlus] },
+    })
+    await flushPromises()
+
+    // 打开对话框
+    await wrapper.find('button').trigger('click')
+    await flushPromises()
+
+    // 切换任务类型为接口生成:el-radio-group 触发 update:modelValue
+    const radioGroup = wrapper.findComponent({ name: 'ElRadioGroup' })
+    await radioGroup.vm.$emit('update:modelValue', 'api_generation')
+    await flushPromises()
+
+    // 选文档 + 选模块
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    await selects[0].vm.$emit('update:modelValue', 3)
+    await selects[1].vm.$emit('update:modelValue', 5)
+    await flushPromises()
+
+    // 点击「发起」
+    const btns = wrapper.findAll('button')
+    for (const btn of btns) {
+      if (btn.text().trim() === '发起') {
+        await btn.trigger('click')
+        break
+      }
+    }
+    await flushPromises()
+
+    // 不应调用 createJob(因 git_repo_url 缺失)
+    expect(jobsApi.createJob).not.toHaveBeenCalled()
+  })
+
+  it('api_generation 有 git_repo_url 时 payload 带 job_type=api_generation', async () => {
+    const wrapper = mount(JobsPane, {
+      props: { projectId: 1, project: { id: 1, name: 'p', git_repo_url: 'https://x' } as any },
+      global: { plugins: [ElementPlus] },
+    })
+    await flushPromises()
+
+    await wrapper.find('button').trigger('click')
+    await flushPromises()
+
+    const radioGroup = wrapper.findComponent({ name: 'ElRadioGroup' })
+    await radioGroup.vm.$emit('update:modelValue', 'api_generation')
+    await flushPromises()
+
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    await selects[0].vm.$emit('update:modelValue', 3)
+    await selects[1].vm.$emit('update:modelValue', 5)
+    await flushPromises()
+
+    const btns = wrapper.findAll('button')
+    for (const btn of btns) {
+      if (btn.text().trim() === '发起') {
+        await btn.trigger('click')
+        break
+      }
+    }
+    await flushPromises()
+
+    expect(jobsApi.createJob).toHaveBeenCalledWith(1, { documentId: 3, targetModuleId: 5, jobType: 'api_generation' })
   })
 
   it('终态任务进度不连 SSE', async () => {
@@ -167,5 +239,46 @@ describe('JobsPane', () => {
     await flushPromises()
 
     expect(closeFn).toHaveBeenCalled()
+  })
+
+  it('SSE stage 事件渲染到进度抽屉', async () => {
+    // 让 subscribeJobEvents 立即回调 onEvent
+    let onEventCb: ((e: any) => void) | null = null
+    jobsApi.subscribeJobEvents.mockImplementation((_id: number, cb: (e: any) => void) => {
+      onEventCb = cb
+      return vi.fn()
+    })
+
+    const wrapper = mount(JobsPane, { props: { projectId: 1 }, global: { plugins: [ElementPlus] } })
+    await flushPromises()
+
+    // 点击 pending 任务进度 → 打开抽屉并订阅 SSE
+    const progressBtns = wrapper.findAll('button').filter(b => b.text().trim() === '进度')
+    await progressBtns[0].trigger('click')
+    await flushPromises()
+
+    expect(onEventCb).toBeTruthy()
+
+    // 模拟后端推送 stage=compiling
+    onEventCb!({ type: 'stage', stage: 'compiling' })
+    await flushPromises()
+    expect(wrapper.find('.stage-text').text()).toContain('编译中')
+
+    // 模拟 stage=fixing round=1
+    onEventCb!({ type: 'stage', stage: 'fixing', round: 1 })
+    await flushPromises()
+    expect(wrapper.find('.stage-text').text()).toContain('修复第 1 轮')
+
+    // 模拟 done.files_count(api_generation 终态)
+    onEventCb!({ type: 'done', files_count: 7 })
+    await flushPromises()
+    expect(wrapper.find('.stage-text').text()).toContain('生成 7 个文件')
+
+    // 模拟 done.staged_count(case_generation 终态)——重新打开抽屉
+    await progressBtns[0].trigger('click')
+    await flushPromises()
+    onEventCb!({ type: 'done', staged_count: 3 })
+    await flushPromises()
+    expect(wrapper.find('.stage-text').text()).toContain('生成 3 条暂存用例')
   })
 })

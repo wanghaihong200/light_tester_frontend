@@ -104,7 +104,8 @@ export interface StagingResponse {
 export type SSEEvent =
   | { type: 'status'; status: JobStatus }
   | { type: 'delta'; text: string }
-  | { type: 'done'; staged_count: number }
+  | { type: 'stage'; stage: 'compiling' | 'fixing'; round?: number }
+  | { type: 'done'; staged_count?: number; files_count?: number }
   | { type: 'error'; message: string }
 
 export interface FileNode {

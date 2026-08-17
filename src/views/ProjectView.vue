@@ -13,7 +13,7 @@
         <DocumentsPane v-if="project" :project-id="project.id" />
       </el-tab-pane>
       <el-tab-pane label="生成任务" name="jobs">
-        <JobsPane v-if="project" :project-id="project.id" @staging-accepted="onStagingAccepted" />
+        <JobsPane v-if="project" :project-id="project.id" :project="project" @staging-accepted="onStagingAccepted" />
       </el-tab-pane>
       <el-tab-pane label="自动化工程" name="repo">
         <RepoPane v-if="project && tab === 'repo'" :project-id="project.id" :project="project" />
