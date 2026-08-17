@@ -29,4 +29,36 @@ describe('ProjectListView', () => {
     await flushPromises()
     expect(document.body.textContent).toContain('新建项目')
   })
+
+  it('编辑弹窗含 git_repo_url/git_token 字段;token 留空则不提交该字段', async () => {
+    const { updateProject } = await import('../../src/api/projects')
+    const wrapper = mount(ProjectListView, { global: { plugins: [ElementPlus] }, attachTo: document.body })
+    await flushPromises()
+    const editBtn = wrapper.findAll('button').find((b) => b.text() === '编辑')!
+    await editBtn.trigger('click')
+    await flushPromises()
+
+    // body 里可能残留前一个用例未卸载的对话框,按标题"编辑项目"精确定位本用例的对话框
+    const dlg = [...document.querySelectorAll('.el-dialog')].find((d) => d.textContent?.includes('编辑项目'))!
+    expect(dlg.textContent).toContain('Git 仓库')
+    expect(dlg.textContent).toContain('Git Token')
+
+    // 对话框内 input 顺序:名称 / Git 仓库 / Git Token(描述是 textarea)
+    const inputs = dlg.querySelectorAll<HTMLInputElement>('.el-input__inner')
+    expect(inputs[2].placeholder).toContain('留空表示不修改')
+    inputs[1].value = 'http://localhost:8090/root/demo.git'
+    inputs[1].dispatchEvent(new Event('input'))
+    await flushPromises()
+
+    const saveBtn = [...dlg.querySelectorAll('button')].find((b) => b.textContent === '保存')!
+    saveBtn.click()
+    await flushPromises()
+
+    expect(updateProject).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ git_repo_url: 'http://localhost:8090/root/demo.git' }),
+    )
+    // token 留空 → payload 不含 git_token(后端 exclude_unset 语义:不出现即不修改)
+    expect((updateProject as ReturnType<typeof vi.fn>).mock.calls[0][1]).not.toHaveProperty('git_token')
+  })
 })

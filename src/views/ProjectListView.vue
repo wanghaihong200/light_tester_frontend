@@ -25,6 +25,16 @@
         <el-form-item label="描述">
           <el-input v-model="form.description" type="textarea" :rows="3" />
         </el-form-item>
+        <el-form-item label="Git 仓库">
+          <el-input v-model="form.git_repo_url" maxlength="500" placeholder="http(s)://…/repo.git,接口生成任务与工程同步用" />
+        </el-form-item>
+        <el-form-item label="Git Token">
+          <el-input
+            v-model="form.git_token"
+            maxlength="200"
+            :placeholder="editing ? '留空表示不修改' : '可选,GitLab 访问 Token'"
+          />
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -45,7 +55,7 @@ const loading = ref(false)
 const dialogVisible = ref(false)
 const saving = ref(false)
 const editing = ref<Project | null>(null)
-const form = ref({ name: '', description: '' })
+const form = ref({ name: '', description: '', git_repo_url: '', git_token: '' })
 
 async function load() {
   loading.value = true
@@ -61,12 +71,13 @@ onMounted(load)
 
 function openCreate() {
   editing.value = null
-  form.value = { name: '', description: '' }
+  form.value = { name: '', description: '', git_repo_url: '', git_token: '' }
   dialogVisible.value = true
 }
 function openEdit(p: Project) {
   editing.value = p
-  form.value = { name: p.name, description: p.description ?? '' }
+  // git_token 后端不返回,无法回填 → 留空表示不修改(exclude_unset 语义)
+  form.value = { name: p.name, description: p.description ?? '', git_repo_url: p.git_repo_url ?? '', git_token: '' }
   dialogVisible.value = true
 }
 
@@ -77,8 +88,23 @@ async function save() {
   }
   saving.value = true
   try {
-    if (editing.value) await updateProject(editing.value.id, { name: form.value.name.trim(), description: form.value.description || null })
-    else await createProject({ name: form.value.name.trim(), description: form.value.description || null })
+    if (editing.value) {
+      // token 仅在用户输入时提交:显式传 null 会把已存 token 清掉(exclude_unset 只区分字段是否出现)
+      const payload: Parameters<typeof updateProject>[1] = {
+        name: form.value.name.trim(),
+        description: form.value.description || null,
+        git_repo_url: form.value.git_repo_url.trim() || null,
+      }
+      if (form.value.git_token.trim()) payload.git_token = form.value.git_token.trim()
+      await updateProject(editing.value.id, payload)
+    } else {
+      await createProject({
+        name: form.value.name.trim(),
+        description: form.value.description || null,
+        git_repo_url: form.value.git_repo_url.trim() || null,
+        git_token: form.value.git_token.trim() || null,
+      })
+    }
     dialogVisible.value = false
     await load()
   } catch (e) {
