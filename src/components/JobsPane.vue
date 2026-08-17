@@ -177,6 +177,7 @@ function onEvent(e: SSEEvent) {
     if (doneJob) { doneJob.status = 'completed' }
     drawerStream.value += `完成,共 ${e.staged_count} 条暂存用例\n`
     ElMessage.success(`任务完成,共 ${e.staged_count} 条暂存用例`)
+    loadJobs() // 刷新 tokens/费用等终值(本地只同步过状态)
     disconnectSSE()
   } else if (e.type === 'error') {
     drawerStatus.value = 'failed'

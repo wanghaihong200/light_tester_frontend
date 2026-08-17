@@ -13,7 +13,7 @@
         <DocumentsPane v-if="project" :project-id="project.id" />
       </el-tab-pane>
       <el-tab-pane label="生成任务" name="jobs">
-        <JobsPane v-if="project" :project-id="project.id" @staging-accepted="mindmapKey++" />
+        <JobsPane v-if="project" :project-id="project.id" @staging-accepted="onStagingAccepted" />
       </el-tab-pane>
     </el-tabs>
   </div>
@@ -21,7 +21,7 @@
 
 <script setup lang="ts">
 import { ElMessage } from 'element-plus'
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import DocumentsPane from '../components/DocumentsPane.vue'
 import JobsPane from '../components/JobsPane.vue'
@@ -34,6 +34,24 @@ const project = ref<Project | null>(null)
 const loaded = ref(false)
 const tab = ref('mindmap')
 const mindmapKey = ref(0)
+const mindmapDirty = ref(false)
+
+// 转正后导图需重挂刷新;但导图 tab 隐藏时容器 display:none 尺寸为 0,
+// simple-mind-map 构造会抛"容器元素el的宽高不能为0"——推迟到 tab 激活时再重挂
+function onStagingAccepted() {
+  if (tab.value === 'mindmap') {
+    mindmapKey.value++
+  } else {
+    mindmapDirty.value = true
+  }
+}
+
+watch(tab, (t) => {
+  if (t === 'mindmap' && mindmapDirty.value) {
+    mindmapDirty.value = false
+    mindmapKey.value++
+  }
+})
 
 onMounted(async () => {
   try {
