@@ -30,18 +30,29 @@ describe('MindmapEditor 封装', () => {
     expect(fakeInstance.setData).toHaveBeenCalledWith(sample2)
   })
 
-  it('node_active 转发为 nodeActive 事件', async () => {
+  it('node_click 转发为 nodeActive 事件(重复点击已激活节点也要转发)', async () => {
     const wrapper = mount(MindmapEditor, { props: { data: sample } })
-    const handler = fakeInstance.on.mock.calls.find((c) => c[0] === 'node_active')![1] as (node: unknown, active: boolean) => void
-    handler({ getData: (k: string) => (k === 'nodeType' ? 'case' : 42) }, true)
+    const handler = fakeInstance.on.mock.calls.find((c) => c[0] === 'node_click')![1] as (node: unknown) => void
+    const node = { getData: (k: string) => (k === 'nodeType' ? 'case' : 42) }
+    handler(node)
+    handler(node) // 同一节点再次点击仍应转发
     await flushPromises()
+    expect(wrapper.emitted('nodeActive')).toHaveLength(2)
     expect(wrapper.emitted('nodeActive')![0]).toEqual([{ nodeType: 'case', refId: 42 }])
   })
 
-  it('取消激活不触发事件', async () => {
+  it('根节点点击只带 nodeType', async () => {
     const wrapper = mount(MindmapEditor, { props: { data: sample } })
-    const handler = fakeInstance.on.mock.calls.find((c) => c[0] === 'node_active')![1] as (node: unknown, active: boolean) => void
-    handler({ getData: () => 'case' }, false)
+    const handler = fakeInstance.on.mock.calls.find((c) => c[0] === 'node_click')![1] as (node: unknown) => void
+    handler({ getData: (k: string) => (k === 'nodeType' ? 'root' : undefined) })
+    await flushPromises()
+    expect(wrapper.emitted('nodeActive')![0]).toEqual([{ nodeType: 'root' }])
+  })
+
+  it('无 nodeType 数据的节点不触发', async () => {
+    const wrapper = mount(MindmapEditor, { props: { data: sample } })
+    const handler = fakeInstance.on.mock.calls.find((c) => c[0] === 'node_click')![1] as (node: unknown) => void
+    handler({ getData: () => undefined })
     await flushPromises()
     expect(wrapper.emitted('nodeActive')).toBeUndefined()
   })

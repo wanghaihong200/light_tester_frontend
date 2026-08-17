@@ -13,9 +13,10 @@ export interface MindmapNode {
   children: MindmapNode[]
 }
 
-/** 用例叶子显示文本:执行通过加对勾,恒带优先级前缀 */
+/** 用例叶子显示文本:执行结果标记(✓ 通过 / ✗ 未通过),恒带优先级前缀 */
 export function caseLabel(c: CaseSummary): string {
-  return `${c.executed_pass === true ? '✓ ' : ''}[${c.priority}] ${c.title}`
+  const mark = c.executed_pass === true ? '✓ ' : c.executed_pass === false ? '✗ ' : ''
+  return `${mark}[${c.priority}] ${c.title}`
 }
 
 function caseToNode(c: CaseSummary): MindmapNode {

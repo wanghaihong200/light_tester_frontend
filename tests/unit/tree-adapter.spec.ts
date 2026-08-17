@@ -36,10 +36,10 @@ describe('toMindmapData', () => {
     expect(m1.children[0].data.refId).toBe(3)
   })
 
-  it('用例叶子文本带优先级,通过带对勾', () => {
+  it('用例叶子文本带优先级,通过/未通过分别带 ✓/✗ 标记', () => {
     const cases = root.children[0].children[0].children[0].children
     expect(cases[0].data.text).toBe('✓ [P0] 正确账号密码登录成功')
-    expect(cases[1].data.text).toBe('[P1] 密码错误提示')
+    expect(cases[1].data.text).toBe('✗ [P1] 密码错误提示')
     expect(cases[0].data).toMatchObject({ nodeType: 'case', refId: 100 })
   })
 
@@ -54,6 +54,7 @@ describe('caseLabel / canAddChild / flattenModules', () => {
   it('caseLabel 三态', () => {
     expect(caseLabel({ id: 1, title: 't', priority: 'P2', executed_pass: null })).toBe('[P2] t')
     expect(caseLabel({ id: 1, title: 't', priority: 'P2', executed_pass: true })).toBe('✓ [P2] t')
+    expect(caseLabel({ id: 1, title: 't', priority: 'P2', executed_pass: false })).toBe('✗ [P2] t')
   })
 
   it('canAddChild 类型规则', () => {

@@ -80,6 +80,16 @@ describe('CaseForm', () => {
     expect(api.patchExecution).toHaveBeenCalledWith(100, null)
   })
 
+  it('执行结果仅提供通过/未通过两项(未执行只能来自初始态)', async () => {
+    const wrapper = mountForm()
+    await flushPromises()
+    const execLabels = wrapper
+      .findAll('.el-radio-button')
+      .map((b) => b.text())
+      .filter((t) => ['通过', '未通过', '未执行'].includes(t))
+    expect(execLabels).toEqual(['通过', '未通过'])
+  })
+
   it('执行结果保存失败时提示内容已保存', async () => {
     api.patchExecution.mockRejectedValueOnce(new Error('x'))
     const errorSpy = vi.spyOn(ElMessage, 'error')

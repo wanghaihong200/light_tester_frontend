@@ -26,8 +26,9 @@ onMounted(() => {
     disableDBClickTapNode: true,
     enableAutoEnterTextEditWhenKeydown: false,
   })
-  mindMap.on('node_active', (node: { getData: (key: string) => unknown }, isActive: boolean) => {
-    if (!isActive) return
+  // 订阅 node_click 而非 node_active:抽屉关闭后节点仍是激活态,再点同一节点
+  // 不会重新触发 node_active,会导致编辑抽屉无法再次打开(冒烟问题 1)
+  mindMap.on('node_click', (node: { getData: (key: string) => unknown }) => {
     const nodeType = node.getData('nodeType') as NodeType | undefined
     if (!nodeType) return
     if (nodeType === 'root') emit('nodeActive', { nodeType: 'root' })

@@ -13,7 +13,6 @@
       </el-form-item>
       <el-form-item label="执行结果">
         <el-radio-group v-model="execution">
-          <el-radio-button :value="null">未执行</el-radio-button>
           <el-radio-button :value="true">通过</el-radio-button>
           <el-radio-button :value="false">未通过</el-radio-button>
         </el-radio-group>
