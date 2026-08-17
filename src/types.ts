@@ -106,3 +106,29 @@ export type SSEEvent =
   | { type: 'delta'; text: string }
   | { type: 'done'; staged_count: number }
   | { type: 'error'; message: string }
+
+export interface FileNode {
+  name: string
+  path: string
+  is_dir: boolean
+  children?: FileNode[] | null
+}
+export interface ChangeFile {
+  path: string
+  status: 'added' | 'modified' | 'deleted'
+  tracked: boolean
+}
+export interface SyncResult {
+  cloned: boolean
+  updated: boolean
+  failed: boolean
+  branch: string
+  commit_short: string
+  error?: string | null
+}
+export interface PushResult {
+  ok: boolean
+  branch: string
+  commit_short: string
+  pushed_files: string[]
+}

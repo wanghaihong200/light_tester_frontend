@@ -15,6 +15,9 @@
       <el-tab-pane label="生成任务" name="jobs">
         <JobsPane v-if="project" :project-id="project.id" @staging-accepted="onStagingAccepted" />
       </el-tab-pane>
+      <el-tab-pane label="自动化工程" name="repo">
+        <RepoPane v-if="project && tab === 'repo'" :project-id="project.id" :project="project" />
+      </el-tab-pane>
     </el-tabs>
   </div>
 </template>
@@ -26,6 +29,7 @@ import { useRoute } from 'vue-router'
 import DocumentsPane from '../components/DocumentsPane.vue'
 import JobsPane from '../components/JobsPane.vue'
 import MindmapPane from '../components/MindmapPane.vue'
+import RepoPane from '../components/RepoPane.vue'
 import { listProjects } from '../api/projects'
 import type { Project } from '../types'
 
