@@ -19,6 +19,9 @@
       <el-table-column label="费用" width="100">
         <template #default="{ row }">${{ row.cost_usd.toFixed(4) }}</template>
       </el-table-column>
+      <el-table-column label="时长" width="90">
+        <template #default="{ row }">{{ formatDuration(row) }}</template>
+      </el-table-column>
       <el-table-column label="操作" width="160">
         <template #default="{ row }">
           <el-button size="small" @click="openDrawer(row)">进度</el-button>
@@ -117,6 +120,12 @@ const tagMap: Record<JobStatus, string> = { pending: 'info', running: 'warning',
 function statusText(s: JobStatus) { return statusMap[s] ?? s }
 function statusTagType(s: JobStatus) { return tagMap[s] ?? 'info' }
 function indentModule(m: { name: string; depth: number }) { return '　'.repeat(m.depth) + m.name }
+function formatDuration(row: GenerationJob): string {
+  if (!row.started_at) return '-'
+  const end = row.finished_at ? new Date(row.finished_at).getTime() : Date.now()
+  const sec = Math.max(0, Math.round((end - new Date(row.started_at).getTime()) / 1000))
+  return sec >= 60 ? `${Math.floor(sec / 60)}分${sec % 60}秒` : `${sec}秒`
+}
 
 async function loadJobs() {
   loading.value = true
@@ -170,10 +179,8 @@ function openDrawer(job: GenerationJob) {
   drawerStream.value = ''
   stageText.value = ''
   drawerVisible.value = true
-  if (job.status !== 'completed' && job.status !== 'failed') {
-    const close = subscribeJobEvents(job.id, onEvent)
-    closeSSE.value = close
-  }
+  const close = subscribeJobEvents(job.id, onEvent)
+  closeSSE.value = close
 }
 
 function onDrawerClose() {
@@ -182,6 +189,14 @@ function onDrawerClose() {
 
 function onEvent(e: SSEEvent) {
   if (!drawerJob.value) return
+  if (e.type === 'snapshot') {
+    drawerStatus.value = e.status
+    drawerStream.value = e.output_text ?? ''
+    if (e.error) drawerStream.value += `\n[错误] ${e.error}`
+    stageText.value = e.files_count ? `生成 ${e.files_count} 个文件` : e.staged_count ? `生成 ${e.staged_count} 条暂存用例` : ''
+    disconnectSSE()
+    return
+  }
   if (e.type === 'status') {
     drawerStatus.value = e.status
     const job = jobs.value.find(j => j.id === drawerJob.value!.id)

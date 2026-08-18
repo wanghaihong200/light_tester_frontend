@@ -21,6 +21,9 @@ const jobsApi = vi.hoisted(() => {
         error: null,
         created_at: '2026-08-16T10:00:00',
         document_name: '需求文档.md',
+        output_text: null,
+        started_at: null,
+        finished_at: null,
       },
       {
         id: 9,
@@ -36,6 +39,9 @@ const jobsApi = vi.hoisted(() => {
         error: null,
         created_at: '2026-08-15T10:00:00',
         document_name: 'API文档.md',
+        output_text: null,
+        started_at: null,
+        finished_at: null,
       },
     ]),
     createJob: vi.fn().mockResolvedValue({
@@ -258,26 +264,23 @@ describe('JobsPane', () => {
     expect(jobsApi.createJob).toHaveBeenCalledWith(1, { documentId: 3, jobType: 'case_generation' })
   })
 
-  it('终态任务进度不连 SSE', async () => {
+  it('终态任务进度连 SSE 并渲染 snapshot 回放', async () => {
+    let onEventCb: ((e: any) => void) | null = null
+    jobsApi.subscribeJobEvents.mockImplementation((_id: number, cb: (e: any) => void) => { onEventCb = cb; return vi.fn() })
     const wrapper = mount(JobsPane, { props: { projectId: 1 }, global: { plugins: [ElementPlus] } })
     await flushPromises()
-
-    // 先重置 subscribeJobEvents 调用记录
-    jobsApi.subscribeJobEvents.mockClear()
-
-    // 找到所有「进度」按钮:第一个=pending(row0),第二个=completed(row1)
     const progressBtns = wrapper.findAll('button').filter(b => b.text().trim() === '进度')
-    expect(progressBtns.length).toBeGreaterThanOrEqual(2)
-    // 点击第二个(completed 任务的进度按钮)
-    await progressBtns[1].trigger('click')
+    await progressBtns[1].trigger('click')  // row1 = completed
     await flushPromises()
-
-    // 抽屉应打开且显示终态信息
-    expect(wrapper.find('.el-drawer').exists()).toBe(true)
-    // 抽屉文本应包含 DB 状态(已完成)
-    expect(wrapper.text()).toContain('已完成')
-    // 终态任务不应调用 subscribeJobEvents
-    expect(jobsApi.subscribeJobEvents).not.toHaveBeenCalled()
+    expect(jobsApi.subscribeJobEvents).toHaveBeenCalled()  // ← 原用例断言 not:反转
+    onEventCb!({
+      type: 'snapshot', status: 'completed', error: null,
+      output_text: '历史流式输出全文', input_tokens: 11, output_tokens: 22,
+      files_count: 0, staged_count: 3,
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('历史流式输出全文')
+    expect(wrapper.find('.stage-text').text()).toContain('生成 3 条暂存用例')
   })
 
   it('抽屉关闭断开', async () => {
@@ -343,5 +346,20 @@ describe('JobsPane', () => {
     onEventCb!({ type: 'done', staged_count: 3 })
     await flushPromises()
     expect(wrapper.find('.stage-text').text()).toContain('生成 3 条暂存用例')
+  })
+
+  it('列表渲染时长列(终态任务显示 finished-started)', async () => {
+    jobsApi.listJobs.mockResolvedValue([
+      {
+        id: 9, project_id: 1, document_id: 2, target_module_id: 4, job_type: 'generate',
+        status: 'completed' as const, model: 'gpt-4', input_tokens: 1200, output_tokens: 800,
+        cost_usd: 0.05, error: null, created_at: '2026-08-15T10:00:00', document_name: 'API文档.md',
+        output_text: null, started_at: '2026-08-18T10:00:00', finished_at: '2026-08-18T10:02:30',
+      },
+    ])
+    const wrapper = mount(JobsPane, { props: { projectId: 1 }, global: { plugins: [ElementPlus] } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('时长')
+    expect(wrapper.text()).toContain('2分30秒')
   })
 })

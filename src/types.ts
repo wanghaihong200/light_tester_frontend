@@ -77,6 +77,9 @@ export interface GenerationJob {
   error: string | null
   created_at: string
   document_name: string | null
+  output_text: string | null
+  started_at: string | null
+  finished_at: string | null
 }
 
 export interface StagedCaseItem {
@@ -106,6 +109,8 @@ export type SSEEvent =
   | { type: 'delta'; text: string }
   | { type: 'stage'; stage: 'compiling' | 'fixing'; round?: number }
   | { type: 'done'; staged_count?: number; files_count?: number }
+  | { type: 'snapshot'; status: JobStatus; error: string | null; output_text: string | null;
+      input_tokens: number; output_tokens: number; files_count: number; staged_count: number }
   | { type: 'error'; message: string }
 
 export interface FileNode {
