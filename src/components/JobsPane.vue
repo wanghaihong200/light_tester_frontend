@@ -22,9 +22,15 @@
       <el-table-column label="时长" width="90">
         <template #default="{ row }">{{ formatDuration(row) }}</template>
       </el-table-column>
+      <el-table-column label="创建时间" width="110">
+        <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
+      </el-table-column>
+      <el-table-column label="修改时间" width="110">
+        <template #default="{ row }">{{ formatTime(row.finished_at) }}</template>
+      </el-table-column>
       <el-table-column label="操作" width="160">
         <template #default="{ row }">
-          <el-button size="small" @click="openDrawer(row)">进度</el-button>
+          <el-button size="small" @click="openDrawer(row)">详情</el-button>
           <el-button v-if="row.status === 'completed'" size="small" @click="openStaging(row)">暂存区</el-button>
         </template>
       </el-table-column>
@@ -56,11 +62,24 @@
       </template>
     </el-dialog>
 
-    <!-- 进度抽屉 -->
-    <el-drawer v-model="drawerVisible" :title="'任务 #' + (drawerJob?.id ?? '') + ' 进度'" size="50%" @close="onDrawerClose">
+    <!-- 详情抽屉 -->
+    <el-drawer v-model="drawerVisible" :title="'任务 #' + (drawerJob?.id ?? '') + ' 详情'" size="50%" @close="onDrawerClose">
       <div v-if="drawerJob">
-        <p>状态: <el-tag :type="statusTagType(drawerStatus)">{{ statusText(drawerStatus) }}</el-tag></p>
-        <p v-if="stageText" class="stage-text">{{ stageText }}</p>
+        <p>
+          状态: <el-tag :type="statusTagType(drawerStatus)">{{ statusText(drawerStatus) }}</el-tag>
+          <span v-if="stageText" class="stage-text">{{ stageText }}</span>
+        </p>
+        <p class="meta-line">
+          创建 {{ formatTime(drawerJob.created_at) }} · 开始 {{ formatTime(drawerJob.started_at) }}
+          · 结束 {{ formatTime(drawerJob.finished_at) }} · 时长 {{ formatDuration(drawerJob) }}
+          · tokens {{ drawerJob.input_tokens }}/{{ drawerJob.output_tokens }} · ${{ drawerJob.cost_usd.toFixed(4) }}
+        </p>
+        <el-collapse>
+          <el-collapse-item name="thinking" title="思考过程">
+            <pre v-if="drawerThinking" class="stream-output thinking-output">{{ drawerThinking }}</pre>
+            <p v-else class="thinking-empty">无思考记录(计划 6 之前的任务未捕获)</p>
+          </el-collapse-item>
+        </el-collapse>
         <p v-if="drawerJob.error">{{ drawerJob.error }}</p>
         <pre v-if="drawerStream" class="stream-output">{{ drawerStream }}</pre>
       </div>
@@ -108,6 +127,7 @@ const drawerVisible = ref(false)
 const drawerJob = ref<GenerationJob | null>(null)
 const drawerStatus = ref<JobStatus>('pending')
 const drawerStream = ref('')
+const drawerThinking = ref('')
 const stageText = ref('')
 const closeSSE = ref<(() => void) | null>(null)
 
@@ -125,6 +145,13 @@ function formatDuration(row: GenerationJob): string {
   const end = row.finished_at ? new Date(row.finished_at).getTime() : Date.now()
   const sec = Math.max(0, Math.round((end - new Date(row.started_at).getTime()) / 1000))
   return sec >= 60 ? `${Math.floor(sec / 60)}分${sec % 60}秒` : `${sec}秒`
+}
+
+function formatTime(iso: string | null): string {
+  if (!iso) return '-'
+  const d = new Date(iso)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 async function loadJobs() {
@@ -177,6 +204,7 @@ function openDrawer(job: GenerationJob) {
   drawerJob.value = job
   drawerStatus.value = job.status
   drawerStream.value = ''
+  drawerThinking.value = ''
   stageText.value = ''
   drawerVisible.value = true
   const close = subscribeJobEvents(job.id, onEvent)
@@ -192,6 +220,7 @@ function onEvent(e: SSEEvent) {
   if (e.type === 'snapshot') {
     drawerStatus.value = e.status
     drawerStream.value = e.output_text ?? ''
+    drawerThinking.value = e.thinking_text ?? ''
     if (e.error) drawerStream.value += `\n[错误] ${e.error}`
     stageText.value = e.files_count ? `生成 ${e.files_count} 个文件` : e.staged_count ? `生成 ${e.staged_count} 条暂存用例` : ''
     disconnectSSE()
@@ -201,6 +230,8 @@ function onEvent(e: SSEEvent) {
     drawerStatus.value = e.status
     const job = jobs.value.find(j => j.id === drawerJob.value!.id)
     if (job) job.status = e.status
+  } else if (e.type === 'thinking_delta') {
+    drawerThinking.value += e.text
   } else if (e.type === 'delta') {
     drawerStream.value += e.text
   } else if (e.type === 'stage') {
@@ -221,6 +252,7 @@ function onEvent(e: SSEEvent) {
       ElMessage.success(`任务完成,共 ${cnt} 条暂存用例`)
     }
     loadJobs() // 刷新 tokens/费用等终值(本地只同步过状态)
+    drawerJob.value = jobs.value.find(j => j.id === drawerJob.value!.id) ?? drawerJob.value
     disconnectSSE()
   } else if (e.type === 'error') {
     drawerStatus.value = 'failed'
@@ -299,5 +331,16 @@ onBeforeUnmount(() => {
 .stage-text {
   color: #e6a23c;
   font-weight: 500;
+}
+.meta-line {
+  font-size: 12px;
+  color: #909399;
+}
+.thinking-output {
+  background: #fafafa;
+}
+.thinking-empty {
+  color: #909399;
+  font-size: 13px;
 }
 </style>
