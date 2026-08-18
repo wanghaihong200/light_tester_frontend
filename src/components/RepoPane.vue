@@ -111,10 +111,11 @@ function onBranchChange(b: string) {
   doSync(b)
 }
 
-/** 节点颜色:文件按 path 精确匹配变更集合;目录看子树是否含变更(根=仓库级)。 */
+/** 节点颜色:文件按 path 精确匹配变更集合;目录看子树是否含变更(根=仓库级,path='.' 归一为空)。 */
 function isChangedUnder(node: FileNode): boolean {
   if (!node.is_dir) return changedPaths.value.has(node.path)
-  const prefix = node.path ? node.path + '/' : ''
+  const base = node.path === '.' ? '' : node.path
+  const prefix = base ? base + '/' : ''
   for (const p of changedPaths.value) {
     if (p.startsWith(prefix)) return true
   }

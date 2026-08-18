@@ -42,9 +42,9 @@ describe('RepoPane', () => {
     expect(w.text()).toContain('点击「同步工程」拉取仓库')
   })
 
-  // 树:根(path='' 匹配一切变更→红) / pom.xml 干净绿 / src 含变更红 / NewTest.java 精确匹配红
+  // 树(根 path='.' 对齐真实后端 rel.as_posix()):根匹配一切变更→红 / pom.xml 干净绿 / src 含变更红 / NewTest.java 精确匹配红
   const TREE: any = {
-    name: 'demo-repo', path: '', is_dir: true,
+    name: 'demo-repo', path: '.', is_dir: true,
     children: [
       { name: 'pom.xml', path: 'pom.xml', is_dir: false, children: null },
       { name: 'src', path: 'src', is_dir: true, children: [
