@@ -13,12 +13,20 @@ const emit = defineEmits<{ (e: 'nodeActive', payload: { nodeType: NodeType; refI
 
 const containerRef = ref<HTMLElement>()
 let mindMap: MindMap | null = null
+let resizeObserver: ResizeObserver | null = null
 
 const EMPTY: MindmapNode = { data: { text: '(空项目,请先添加模块)', uid: 'root-empty', nodeType: 'root' }, children: [] }
 
-onMounted(() => {
+function hasSize(el: HTMLElement | undefined): boolean {
+  return !!el && el.offsetWidth > 0 && el.offsetHeight > 0
+}
+
+// 幂等初始化:容器有真实尺寸才构造(simple-mind-map 对 0 尺寸容器直接抛错,
+// 且错误发生在 mounted(post-flush)会中断 Vue 调度器,整页交互失效)
+function initMindMap() {
+  if (mindMap || !containerRef.value) return
   mindMap = new MindMap({
-    el: containerRef.value!,
+    el: containerRef.value,
     data: props.data ?? EMPTY,
     layout: 'logicalStructure',
     theme: 'default',
@@ -34,6 +42,24 @@ onMounted(() => {
     if (nodeType === 'root') emit('nodeActive', { nodeType: 'root' })
     else emit('nodeActive', { nodeType, refId: node.getData('refId') as number | undefined })
   })
+}
+
+onMounted(() => {
+  if (hasSize(containerRef.value)) {
+    initMindMap()
+    return
+  }
+  // 隐藏 tab(display:none)下挂载:等容器显示出来再初始化。
+  // 不可用 nextTick/重试猜时序——pane 显示与重挂是两条异步更新链(暂存入库后
+  // 切 tab 的真实缺陷);ResizeObserver 由浏览器保证"显示必然触发"
+  resizeObserver = new ResizeObserver(() => {
+    if (hasSize(containerRef.value)) {
+      resizeObserver?.disconnect()
+      resizeObserver = null
+      initMindMap()
+    }
+  })
+  resizeObserver.observe(containerRef.value!)
 })
 
 watch(
@@ -44,6 +70,8 @@ watch(
 )
 
 onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
+  resizeObserver = null
   mindMap?.destroy()
   mindMap = null
 })
