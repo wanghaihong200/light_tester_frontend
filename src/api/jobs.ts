@@ -1,9 +1,11 @@
 import type { GenerationJob, SSEEvent, StagingResponse } from '../types'
 import { http } from './client'
 
-// 创建生成任务
-export function createJob(projectId: number, payload: { documentId: number; targetModuleId: number; jobType?: 'case_generation' | 'api_generation' }) {
-  const body: Record<string, unknown> = { document_id: payload.documentId, target_module_id: payload.targetModuleId }
+// 创建生成任务(模块三选一:选中 id / 手输名字 / 留空)
+export function createJob(projectId: number, payload: { documentId: number; targetModuleId?: number; targetModuleName?: string; jobType?: 'case_generation' | 'api_generation' }) {
+  const body: Record<string, unknown> = { document_id: payload.documentId }
+  if (payload.targetModuleId != null) body.target_module_id = payload.targetModuleId
+  if (payload.targetModuleName) body.target_module_name = payload.targetModuleName
   if (payload.jobType) body.job_type = payload.jobType
   return http.post<GenerationJob>(`/projects/${projectId}/jobs`, body)
 }

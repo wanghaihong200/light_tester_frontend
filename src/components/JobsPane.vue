@@ -1,7 +1,7 @@
 <template>
   <div class="jobs-pane">
     <div class="toolbar">
-      <el-button type="primary" @click="dialogVisible = true">+ 发起生成</el-button>
+      <el-button type="primary" @click="openCreateDialog">+ 发起生成</el-button>
     </div>
 
     <el-table :data="jobs" v-loading="loading" border>
@@ -42,14 +42,14 @@
           </el-select>
         </el-form-item>
         <el-form-item label="模块">
-          <el-select v-model="selectedModId" placeholder="选择目标模块" style="width: 100%">
+          <el-select v-model="selectedModId" placeholder="选择/输入模块(可留空)" filterable allow-create default-first-option clearable style="width: 100%">
             <el-option v-for="m in flatModules" :key="m.id" :label="indentModule(m)" :value="m.id" />
           </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :disabled="!selectedDocId || !selectedModId" :loading="submitting" @click="submitCreate">发起</el-button>
+        <el-button type="primary" :disabled="!selectedDocId" :loading="submitting" @click="submitCreate">发起</el-button>
       </template>
     </el-dialog>
 
@@ -97,7 +97,7 @@ const loading = ref(false)
 
 const dialogVisible = ref(false)
 const selectedDocId = ref<number | null>(null)
-const selectedModId = ref<number | null>(null)
+const selectedModId = ref<number | string | null>(null)
 const submitting = ref(false)
 const jobType = ref<'case_generation' | 'api_generation'>('case_generation')
 
@@ -143,6 +143,13 @@ async function loadTree() {
   } catch (e) {
     ElMessage.error(`加载模块树失败:${(e as Error).message}`)
   }
+}
+
+// Bug1 修复:打开弹窗时重新拉文档/模块列表(上传新文档后下拉不再陈旧)
+function openCreateDialog() {
+  dialogVisible.value = true
+  loadDocuments()
+  loadTree()
 }
 
 onMounted(() => {
@@ -210,18 +217,21 @@ function onEvent(e: SSEEvent) {
 }
 
 async function submitCreate() {
-  if (!selectedDocId.value || !selectedModId.value) return
+  if (!selectedDocId.value) return
   if (jobType.value === 'api_generation' && !props.project?.git_repo_url) {
     ElMessage.error('请先配置 git_repo_url')
     return
   }
   submitting.value = true
   try {
-    const newJob = await createJob(props.projectId, {
+    const mod = selectedModId.value
+    const payload: { documentId: number; targetModuleId?: number; targetModuleName?: string; jobType: string } = {
       documentId: selectedDocId.value,
-      targetModuleId: selectedModId.value,
       jobType: jobType.value,
-    })
+    }
+    if (typeof mod === 'number') payload.targetModuleId = mod
+    else if (typeof mod === 'string' && mod.trim()) payload.targetModuleName = mod.trim()
+    const newJob = await createJob(props.projectId, payload)
     ElMessage.success('已发起生成任务')
     dialogVisible.value = false
     selectedDocId.value = null

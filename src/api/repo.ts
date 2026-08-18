@@ -1,7 +1,8 @@
 import { http } from './client'
 import type { ChangeFile, FileNode, PushResult, SyncResult } from '../types'
 
-export const syncRepo = (projectId: number) => http.post<SyncResult>(`/projects/${projectId}/repo/sync`)
+export const syncRepo = (projectId: number, branch?: string) =>
+  http.post<SyncResult>(`/projects/${projectId}/repo/sync`, branch ? { branch } : undefined)
 export const listFiles = (projectId: number) => http.get<FileNode | { needs_sync: true }>(`/projects/${projectId}/repo/files`)
 export const readFile = (projectId: number, path: string) =>
   http.get<{ path: string; content: string; language: string }>(`/projects/${projectId}/repo/file?path=${encodeURIComponent(path)}`)

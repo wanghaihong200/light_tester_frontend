@@ -195,6 +195,69 @@ describe('JobsPane', () => {
     expect(jobsApi.createJob).toHaveBeenCalledWith(1, { documentId: 3, targetModuleId: 5, jobType: 'api_generation' })
   })
 
+  it('打开发起弹窗时重拉文档与模块列表(Bug1 回归)', async () => {
+    const wrapper = mount(JobsPane, { props: { projectId: 1 }, global: { plugins: [ElementPlus] } })
+    await flushPromises()
+    // onMounted 各拉 1 次
+    expect(docsApi.listDocuments).toHaveBeenCalledTimes(1)
+    expect(treeApi.fetchTree).toHaveBeenCalledTimes(1)
+
+    // 点击「+ 发起生成」打开弹窗 → 再次拉取(新上传文档立即可见)
+    await wrapper.find('button').trigger('click')
+    await flushPromises()
+    expect(docsApi.listDocuments).toHaveBeenCalledTimes(2)
+    expect(treeApi.fetchTree).toHaveBeenCalledTimes(2)
+  })
+
+  it('手输模块名 payload 带 target_module_name', async () => {
+    const wrapper = mount(JobsPane, { props: { projectId: 1 }, global: { plugins: [ElementPlus] } })
+    await flushPromises()
+
+    await wrapper.find('button').trigger('click')
+    await flushPromises()
+
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    await selects[0].vm.$emit('update:modelValue', 3)          // documentId
+    await selects[1].vm.$emit('update:modelValue', '支付模块')   // allow-create 手输入 → string
+    await flushPromises()
+
+    const btns = wrapper.findAll('button')
+    for (const btn of btns) {
+      if (btn.text().trim() === '发起') {
+        await btn.trigger('click')
+        break
+      }
+    }
+    await flushPromises()
+
+    expect(jobsApi.createJob).toHaveBeenCalledWith(1, {
+      documentId: 3,
+      targetModuleName: '支付模块',
+      jobType: 'case_generation',
+    })
+  })
+
+  it('模块留空可发起,payload 不带模块字段', async () => {
+    const wrapper = mount(JobsPane, { props: { projectId: 1 }, global: { plugins: [ElementPlus] } })
+    await flushPromises()
+
+    await wrapper.find('button').trigger('click')
+    await flushPromises()
+
+    // 只选文档,模块保持空(发起按钮 disabled 只看文档)
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    await selects[0].vm.$emit('update:modelValue', 3)
+    await flushPromises()
+
+    const submitBtn = wrapper.findAll('button').find(b => b.text().trim() === '发起')
+    expect(submitBtn).toBeTruthy()
+    expect((submitBtn!.element as HTMLButtonElement).disabled).toBe(false)
+    await submitBtn!.trigger('click')
+    await flushPromises()
+
+    expect(jobsApi.createJob).toHaveBeenCalledWith(1, { documentId: 3, jobType: 'case_generation' })
+  })
+
   it('终态任务进度不连 SSE', async () => {
     const wrapper = mount(JobsPane, { props: { projectId: 1 }, global: { plugins: [ElementPlus] } })
     await flushPromises()
