@@ -77,7 +77,7 @@
         <el-collapse>
           <el-collapse-item name="thinking" title="思考过程">
             <pre v-if="drawerThinking" class="stream-output thinking-output">{{ drawerThinking }}</pre>
-            <p v-else class="thinking-empty">无思考记录(计划 6 之前的任务未捕获)</p>
+            <p v-else class="thinking-empty">暂无思考记录</p>
           </el-collapse-item>
         </el-collapse>
         <p v-if="drawerJob.error">{{ drawerJob.error }}</p>
@@ -251,8 +251,9 @@ function onEvent(e: SSEEvent) {
       drawerStream.value += `完成,共 ${cnt} 条暂存用例\n`
       ElMessage.success(`任务完成,共 ${cnt} 条暂存用例`)
     }
-    loadJobs() // 刷新 tokens/费用等终值(本地只同步过状态)
-    drawerJob.value = jobs.value.find(j => j.id === drawerJob.value!.id) ?? drawerJob.value
+    loadJobs().then(() => {
+      if (drawerJob.value) drawerJob.value = jobs.value.find(j => j.id === drawerJob.value!.id) ?? drawerJob.value
+    })
     disconnectSSE()
   } else if (e.type === 'error') {
     drawerStatus.value = 'failed'

@@ -283,6 +283,7 @@ describe('JobsPane', () => {
     })
     await flushPromises()
     expect(wrapper.text()).toContain('历史流式输出全文')
+    expect(wrapper.text()).toContain('暂无思考记录')
     expect(wrapper.find('.stage-text').text()).toContain('生成 3 条暂存用例')
   })
 
@@ -332,6 +333,11 @@ describe('JobsPane', () => {
     onEventCb!({ type: 'stage', stage: 'compiling' })
     await flushPromises()
     expect(wrapper.find('.stage-text').text()).toContain('编译中')
+
+    // 模拟 thinking_delta 直播追加
+    onEventCb!({ type: 'thinking_delta', text: '思考片段直播' })
+    await flushPromises()
+    expect(wrapper.text()).toContain('思考片段直播')
 
     // 模拟 stage=fixing round=1
     onEventCb!({ type: 'stage', stage: 'fixing', round: 1 })
