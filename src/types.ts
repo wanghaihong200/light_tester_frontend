@@ -79,6 +79,8 @@ export interface GenerationJob {
   document_name: string | null
   output_text: string | null
   thinking_text: string | null
+  user_prompt: string | null
+  tool_trace: string | null
   started_at: string | null
   finished_at: string | null
 }
@@ -109,10 +111,11 @@ export type SSEEvent =
   | { type: 'status'; status: JobStatus }
   | { type: 'delta'; text: string }
   | { type: 'thinking_delta'; text: string }
+  | { type: 'tool'; text: string }
   | { type: 'stage'; stage: 'compiling' | 'fixing'; round?: number }
   | { type: 'done'; staged_count?: number; files_count?: number }
   | { type: 'snapshot'; status: JobStatus; error: string | null; output_text: string | null;
-      thinking_text: string | null;
+      thinking_text: string | null; tool_trace: string | null;
       input_tokens: number; output_tokens: number; files_count: number; staged_count: number }
   | { type: 'error'; message: string }
 

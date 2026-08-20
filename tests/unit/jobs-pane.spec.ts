@@ -278,7 +278,8 @@ describe('JobsPane', () => {
     expect(jobsApi.subscribeJobEvents).toHaveBeenCalled()  // ← 原用例断言 not:反转
     onEventCb!({
       type: 'snapshot', status: 'completed', error: null,
-      output_text: '历史流式输出全文', thinking_text: null, input_tokens: 11, output_tokens: 22,
+      output_text: '历史流式输出全文', thinking_text: null, tool_trace: null,
+      input_tokens: 11, output_tokens: 22,
       files_count: 0, staged_count: 3,
     })
     await flushPromises()
@@ -396,7 +397,7 @@ describe('JobsPane', () => {
     await flushPromises()
     onEventCb!({
       type: 'snapshot', status: 'completed', error: null,
-      output_text: '产物全文', thinking_text: '历史思考摘要全文',
+      output_text: '产物全文', thinking_text: '历史思考摘要全文', tool_trace: null,
       input_tokens: 11, output_tokens: 22, files_count: 0, staged_count: 3,
     })
     await flushPromises()
@@ -419,5 +420,67 @@ describe('JobsPane', () => {
     expect(wrapper.text()).toContain('修改时间')
     expect(wrapper.text()).toContain('08-18 10:00')
     expect(wrapper.text()).toContain('08-18 10:02')
+  })
+
+  it('发起弹窗填写补充指令 → payload 带 userPrompt', async () => {
+    const wrapper = mount(JobsPane, { props: { projectId: 1 }, global: { plugins: [ElementPlus] } })
+    await flushPromises()
+    await wrapper.find('button').trigger('click')
+    await flushPromises()
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    await selects[0].vm.$emit('update:modelValue', 3)
+    // 补充指令 textarea:ElSelect 内部也有 ElInput,按 type=textarea 区分
+    const textarea = wrapper.findAllComponents({ name: 'ElInput' }).find(c => c.props('type') === 'textarea')
+    expect(textarea).toBeTruthy()
+    await textarea!.vm.$emit('update:modelValue', '只测登录,优先异常')
+    await flushPromises()
+    const btns = wrapper.findAll('button')
+    for (const btn of btns) {
+      if (btn.text().trim() === '发起') { await btn.trigger('click'); break }
+    }
+    await flushPromises()
+    expect(jobsApi.createJob).toHaveBeenCalledWith(1, {
+      documentId: 3, jobType: 'case_generation', userPrompt: '只测登录,优先异常',
+    })
+  })
+
+  it('SSE tool 事件直播过程记录,snapshot 回放并覆盖', async () => {
+    let onEventCb: ((e: any) => void) | null = null
+    jobsApi.subscribeJobEvents.mockImplementation((_id: number, cb: (e: any) => void) => { onEventCb = cb; return vi.fn() })
+    const wrapper = mount(JobsPane, { props: { projectId: 1 }, global: { plugins: [ElementPlus] } })
+    await flushPromises()
+    const detailBtns = wrapper.findAll('button').filter(b => b.text().trim() === '详情')
+    await detailBtns[0].trigger('click')
+    await flushPromises()
+    onEventCb!({ type: 'tool', text: 'Read SKILL.md\n' })
+    await flushPromises()
+    expect(wrapper.text()).toContain('Read SKILL.md')
+    expect(wrapper.text()).toContain('过程记录')
+    // 终态 snapshot 回放完整过程记录(覆盖直播累积,与 thinking 同语义)
+    onEventCb!({
+      type: 'snapshot', status: 'completed', error: null,
+      output_text: 'o', thinking_text: null, tool_trace: 'Bash mvn -q test-compile\n',
+      input_tokens: 1, output_tokens: 2, files_count: 0, staged_count: 0,
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('Bash mvn -q test-compile')
+    expect(wrapper.text()).not.toContain('Read SKILL.md')
+  })
+
+  it('无过程记录的终态 snapshot 显示空态文案', async () => {
+    let onEventCb: ((e: any) => void) | null = null
+    jobsApi.subscribeJobEvents.mockImplementation((_id: number, cb: (e: any) => void) => { onEventCb = cb; return vi.fn() })
+    const wrapper = mount(JobsPane, { props: { projectId: 1 }, global: { plugins: [ElementPlus] } })
+    await flushPromises()
+    const detailBtns = wrapper.findAll('button').filter(b => b.text().trim() === '详情')
+    await detailBtns[0].trigger('click')
+    await flushPromises()
+    onEventCb!({
+      type: 'snapshot', status: 'completed', error: null,
+      output_text: 'o', thinking_text: null, tool_trace: null,
+      input_tokens: 1, output_tokens: 2, files_count: 0, staged_count: 0,
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('暂无过程记录')
   })
 })

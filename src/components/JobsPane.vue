@@ -55,6 +55,16 @@
             <el-option v-for="m in flatModules" :key="m.id" :label="indentModule(m)" :value="m.id" />
           </el-select>
         </el-form-item>
+        <el-form-item label="补充指令">
+          <el-input
+            v-model="supplementaryPrompt"
+            type="textarea"
+            :rows="3"
+            maxlength="2000"
+            show-word-limit
+            placeholder="可选:聚焦生成范围或表达质量偏好,如「只生成登录相关功能点,优先异常场景」"
+          />
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -78,6 +88,10 @@
           <el-collapse-item name="thinking" title="思考过程">
             <pre v-if="drawerThinking" class="stream-output thinking-output">{{ drawerThinking }}</pre>
             <p v-else class="thinking-empty">暂无思考记录</p>
+          </el-collapse-item>
+          <el-collapse-item name="trace" title="过程记录">
+            <pre v-if="drawerTrace" class="stream-output trace-output">{{ drawerTrace }}</pre>
+            <p v-else class="thinking-empty">暂无过程记录</p>
           </el-collapse-item>
         </el-collapse>
         <p v-if="drawerJob.error">{{ drawerJob.error }}</p>
@@ -122,12 +136,14 @@ const selectedDocId = ref<number | null>(null)
 const selectedModId = ref<number | string | null>(null)
 const submitting = ref(false)
 const jobType = ref<'case_generation' | 'api_generation'>('case_generation')
+const supplementaryPrompt = ref('')
 
 const drawerVisible = ref(false)
 const drawerJob = ref<GenerationJob | null>(null)
 const drawerStatus = ref<JobStatus>('pending')
 const drawerStream = ref('')
 const drawerThinking = ref('')
+const drawerTrace = ref('')
 const stageText = ref('')
 const closeSSE = ref<(() => void) | null>(null)
 
@@ -205,6 +221,7 @@ function openDrawer(job: GenerationJob) {
   drawerStatus.value = job.status
   drawerStream.value = ''
   drawerThinking.value = ''
+  drawerTrace.value = ''
   stageText.value = ''
   drawerVisible.value = true
   const close = subscribeJobEvents(job.id, onEvent)
@@ -221,6 +238,7 @@ function onEvent(e: SSEEvent) {
     drawerStatus.value = e.status
     drawerStream.value = e.output_text ?? ''
     drawerThinking.value = e.thinking_text ?? ''
+    drawerTrace.value = e.tool_trace ?? ''
     if (e.error) drawerStream.value += `\n[错误] ${e.error}`
     stageText.value = e.files_count ? `生成 ${e.files_count} 个文件` : e.staged_count ? `生成 ${e.staged_count} 条暂存用例` : ''
     disconnectSSE()
@@ -232,6 +250,8 @@ function onEvent(e: SSEEvent) {
     if (job) job.status = e.status
   } else if (e.type === 'thinking_delta') {
     drawerThinking.value += e.text
+  } else if (e.type === 'tool') {
+    drawerTrace.value += e.text
   } else if (e.type === 'delta') {
     drawerStream.value += e.text
   } else if (e.type === 'stage') {
@@ -273,18 +293,20 @@ async function submitCreate() {
   submitting.value = true
   try {
     const mod = selectedModId.value
-    const payload: { documentId: number; targetModuleId?: number; targetModuleName?: string; jobType: string } = {
+    const payload: { documentId: number; targetModuleId?: number; targetModuleName?: string; jobType: string; userPrompt?: string } = {
       documentId: selectedDocId.value,
       jobType: jobType.value,
     }
     if (typeof mod === 'number') payload.targetModuleId = mod
     else if (typeof mod === 'string' && mod.trim()) payload.targetModuleName = mod.trim()
+    if (supplementaryPrompt.value.trim()) payload.userPrompt = supplementaryPrompt.value.trim()
     const newJob = await createJob(props.projectId, payload)
     ElMessage.success('已发起生成任务')
     dialogVisible.value = false
     selectedDocId.value = null
     selectedModId.value = null
     jobType.value = 'case_generation'
+    supplementaryPrompt.value = ''
     await loadJobs()
     openDrawer(newJob)
   } catch (e) {
@@ -339,6 +361,9 @@ onBeforeUnmount(() => {
 }
 .thinking-output {
   background: #fafafa;
+}
+.trace-output {
+  background: #f0f2f5;
 }
 .thinking-empty {
   color: #909399;
