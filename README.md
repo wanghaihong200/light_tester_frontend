@@ -56,7 +56,7 @@ npm run build                    # 类型检查 + 构建
 - `src/components/MindmapEditor.vue` — simple-mind-map 画布封装(容器有尺寸才初始化,隐藏 tab 下挂载由 ResizeObserver 兜底)
 - `src/components/JobsPane.vue` — 生成任务列表/发起弹窗/详情抽屉(SSE 直播 thinking/delta/tool/进度/终态 snapshot 回放)
 - `src/components/RepoPane.vue` / `PushDialog.vue` — 自动化工程文件树、变更推送
-- `src/views/` — ProjectListView(项目 CRUD)、ProjectView(工作台:导图/文档库/生成任务/自动化工程四 tab)
+- `src/views/` — HomeView(项目 CRUD,卡片墙)、ProjectView(工作台:导图/文档库/生成任务/自动化工程四 tab)
 
 ## 手动冒烟清单(发版自查)
 
