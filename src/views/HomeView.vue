@@ -1,21 +1,22 @@
 <template>
   <div class="home-view">
-    <h2>测试平台 · 项目</h2>
-    <el-button class="new-project" type="primary" @click="openCreate">新建项目</el-button>
-    <el-table :data="projects" v-loading="loading" border>
-      <el-table-column prop="name" label="名称" min-width="160" />
-      <el-table-column prop="description" label="描述" min-width="240" show-overflow-tooltip />
-      <el-table-column label="创建时间" width="180">
-        <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
-      </el-table-column>
-      <el-table-column label="操作" width="220">
-        <template #default="{ row }">
-          <el-button size="small" @click="$router.push(`/projects/${row.id}`)">进入</el-button>
-          <el-button size="small" @click="openEdit(row)">编辑</el-button>
-          <el-button size="small" type="danger" @click="onDelete(row)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+    <div class="page-head">
+      <h2 class="page-title">项目</h2>
+      <el-button class="new-project" type="primary" @click="openCreate">+ 新建项目</el-button>
+    </div>
+    <div v-loading="loading" class="card-grid">
+      <div v-for="p in projects" :key="p.id" class="project-card">
+        <div class="card-title" @click="$router.push(`/projects/${p.id}`)">{{ p.name }}</div>
+        <div class="card-desc" :title="p.description ?? ''">{{ p.description || '暂无描述' }}</div>
+        <div class="card-meta">{{ formatTime(p.created_at) }}</div>
+        <div class="card-actions">
+          <el-button size="small" type="primary" @click="$router.push(`/projects/${p.id}`)">进入</el-button>
+          <el-button size="small" @click="openEdit(p)">编辑</el-button>
+          <el-button size="small" type="danger" @click="onDelete(p)">删除</el-button>
+        </div>
+      </div>
+      <div v-if="!loading && projects.length === 0" class="empty-tip">还没有项目,点右上角「+ 新建项目」开始</div>
+    </div>
 
     <el-dialog v-model="dialogVisible" :title="editing ? '编辑项目' : '新建项目'" width="480px">
       <el-form label-width="80px">
@@ -135,9 +136,68 @@ function formatTime(iso: string): string {
 
 <style scoped>
 .home-view {
-  padding: 16px 0;
+  padding-top: 16px;
 }
-.new-project {
-  margin-bottom: 12px;
+.page-head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.page-title {
+  color: var(--el-text-color-primary);
+  font-size: 18px;
+  margin: 0;
+}
+.card-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+.project-card {
+  background: var(--pro-card-bg);
+  border: 1px solid var(--pro-line);
+  border-radius: var(--border-radius-large);
+  box-shadow: var(--pro-card-shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+.project-card:hover {
+  box-shadow: 0 10px 28px rgba(68, 87, 150, 0.12);
+  transform: translateY(-2px);
+}
+.card-title {
+  color: var(--el-text-color-primary);
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 700;
+}
+.card-title:hover {
+  color: var(--el-color-primary);
+}
+.card-desc {
+  color: var(--el-text-color-regular);
+  display: -webkit-box;
+  min-height: 36px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.card-meta {
+  color: var(--pro-muted);
+  font-size: 12px;
+}
+.card-actions {
+  display: flex;
+  gap: 8px;
+}
+.empty-tip {
+  color: var(--pro-muted);
+  grid-column: 1 / -1;
+  padding: 48px 0;
+  text-align: center;
 }
 </style>

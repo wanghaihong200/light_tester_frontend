@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import { describe, expect, it, vi } from 'vitest'
-import ProjectListView from '../../src/views/ProjectListView.vue'
+import HomeView from '../../src/views/HomeView.vue'
 
 vi.mock('../../src/api/projects', () => ({
   listProjects: vi.fn().mockResolvedValue([
@@ -13,9 +13,9 @@ vi.mock('../../src/api/projects', () => ({
   deleteProject: vi.fn(),
 }))
 
-describe('ProjectListView', () => {
+describe('HomeView', () => {
   it('渲染项目列表', async () => {
-    const wrapper = mount(ProjectListView, { global: { plugins: [ElementPlus] } })
+    const wrapper = mount(HomeView, { global: { plugins: [ElementPlus] } })
     await flushPromises()
     expect(wrapper.text()).toContain('商城系统')
     expect(wrapper.text()).toContain('风控平台')
@@ -23,7 +23,7 @@ describe('ProjectListView', () => {
 
   it('点击"新建项目"打开对话框', async () => {
     // el-dialog 默认 teleport 到 body,断言走 document.body 而非 wrapper
-    const wrapper = mount(ProjectListView, { global: { plugins: [ElementPlus] }, attachTo: document.body })
+    const wrapper = mount(HomeView, { global: { plugins: [ElementPlus] }, attachTo: document.body })
     await flushPromises()
     await wrapper.find('button.new-project').trigger('click')
     await flushPromises()
@@ -32,7 +32,7 @@ describe('ProjectListView', () => {
 
   it('编辑弹窗含 git_repo_url/git_token 字段;token 留空则不提交该字段', async () => {
     const { updateProject } = await import('../../src/api/projects')
-    const wrapper = mount(ProjectListView, { global: { plugins: [ElementPlus] }, attachTo: document.body })
+    const wrapper = mount(HomeView, { global: { plugins: [ElementPlus] }, attachTo: document.body })
     await flushPromises()
     const editBtn = wrapper.findAll('button').find((b) => b.text() === '编辑')!
     await editBtn.trigger('click')
