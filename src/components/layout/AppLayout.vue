@@ -11,7 +11,8 @@
       <TabBar :active-key="activeKey" @select="onTabSelect" @close="onTabClose" />
       <!-- 定高 flex 链:导图编辑器依赖容器有真实尺寸(教训⑦);滚动交给内容区自身 -->
       <main class="app-content">
-        <router-view />
+        <!-- 按路径强制重挂:同一路由记录仅参数变化时 vue-router 会复用实例,onMounted 不重跑,导致数据与页签名 stale -->
+        <router-view :key="route.path" />
       </main>
       <footer class="app-footer">轻测试 LightTester · Powered by Vue3 + FastAPI</footer>
     </div>

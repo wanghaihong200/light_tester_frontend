@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
+import { defineComponent, h, onMounted } from 'vue'
 import AppLayout from '../../src/components/layout/AppLayout.vue'
 import { resetTabs, useTabs } from '../../src/composables/useTabs'
 
@@ -64,5 +65,34 @@ describe('AppLayout 布局壳', () => {
     await flushPromises()
     expect(router.currentRoute.value.path).toBe('/')
     expect(useTabs().tabs.value.map((t) => t.key)).toEqual(['home'])
+  })
+
+  it('项目间直达(参数变化):router-view 按路径重挂载,不复用实例', async () => {
+    let projectMounts = 0
+    const CountingProject = defineComponent({
+      setup() {
+        onMounted(() => {
+          projectMounts++
+        })
+        return () => h('div', 'project')
+      },
+    })
+    // 不 stub router-view:需要真实渲染路由组件来统计 mount 次数
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/', component: { template: '<div class="home-stub">home</div>' } },
+        { path: '/projects/:id', component: CountingProject },
+      ],
+    })
+    await router.push('/projects/1')
+    await router.isReady()
+    mount(AppLayout, { global: { plugins: [router] } })
+    await flushPromises()
+    expect(projectMounts).toBe(1)
+
+    await router.push('/projects/2')
+    await flushPromises()
+    expect(projectMounts).toBe(2)
   })
 })
