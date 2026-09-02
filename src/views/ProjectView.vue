@@ -1,24 +1,25 @@
 <template>
   <div class="project-view">
-    <div class="header">
-      <el-button @click="$router.push('/')">← 项目列表</el-button>
-      <h3 style="margin: 0 12px">{{ project?.name ?? (loaded ? '项目不存在' : '加载中…') }}</h3>
-      <span v-if="project?.description" style="color: #909399">{{ project.description }}</span>
+    <div class="panel-card">
+      <div class="panel-head">
+        <h3 class="panel-title">{{ project?.name ?? (loaded ? '项目不存在' : '加载中…') }}</h3>
+        <span v-if="project?.description" class="panel-desc">{{ project.description }}</span>
+      </div>
+      <el-tabs v-model="tab" class="tabs">
+        <el-tab-pane label="用例导图" name="mindmap">
+          <MindmapPane v-if="project" :key="mindmapKey" :project-id="project.id" :project-name="project.name" />
+        </el-tab-pane>
+        <el-tab-pane label="文档库" name="documents">
+          <DocumentsPane v-if="project" :project-id="project.id" />
+        </el-tab-pane>
+        <el-tab-pane label="生成任务" name="jobs">
+          <JobsPane v-if="project" :project-id="project.id" :project="project" @staging-accepted="onStagingAccepted" />
+        </el-tab-pane>
+        <el-tab-pane label="自动化工程" name="repo">
+          <RepoPane v-if="project && tab === 'repo'" :project-id="project.id" :project="project" />
+        </el-tab-pane>
+      </el-tabs>
     </div>
-    <el-tabs v-model="tab" class="tabs">
-      <el-tab-pane label="用例导图" name="mindmap">
-        <MindmapPane v-if="project" :key="mindmapKey" :project-id="project.id" :project-name="project.name" />
-      </el-tab-pane>
-      <el-tab-pane label="文档库" name="documents">
-        <DocumentsPane v-if="project" :project-id="project.id" />
-      </el-tab-pane>
-      <el-tab-pane label="生成任务" name="jobs">
-        <JobsPane v-if="project" :project-id="project.id" :project="project" @staging-accepted="onStagingAccepted" />
-      </el-tab-pane>
-      <el-tab-pane label="自动化工程" name="repo">
-        <RepoPane v-if="project && tab === 'repo'" :project-id="project.id" :project="project" />
-      </el-tab-pane>
-    </el-tabs>
   </div>
 </template>
 
@@ -31,9 +32,11 @@ import JobsPane from '../components/JobsPane.vue'
 import MindmapPane from '../components/MindmapPane.vue'
 import RepoPane from '../components/RepoPane.vue'
 import { listProjects } from '../api/projects'
+import { useTabs } from '../composables/useTabs'
 import type { Project } from '../types'
 
 const route = useRoute()
+const { openProject } = useTabs()
 const project = ref<Project | null>(null)
 const loaded = ref(false)
 const tab = ref('mindmap')
@@ -62,6 +65,7 @@ onMounted(async () => {
     const id = Number(route.params.id)
     const all = await listProjects()
     project.value = all.find((p) => p.id === id) ?? null
+    openProject(id, project.value?.name ?? '未知项目') // 页签名回填(已存在则改名)
     if (!project.value) ElMessage.error('项目不存在')
   } catch (e) {
     ElMessage.error(`加载项目失败:${(e as Error).message}`)
@@ -77,16 +81,36 @@ onMounted(async () => {
   flex-direction: column;
   height: 100%;
 }
-.header {
+.panel-card {
+  background: var(--pro-card-bg);
+  border: 1px solid var(--pro-line);
+  border-radius: var(--border-radius-large);
+  box-shadow: var(--pro-card-shadow);
   display: flex;
-  align-items: center;
-  padding: 12px 16px 0;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: 12px 16px;
+}
+.panel-head {
+  align-items: baseline;
+  display: flex;
+  gap: 12px;
+}
+.panel-title {
+  color: var(--el-text-color-primary);
+  font-size: 16px;
+  margin: 0 0 8px;
+}
+.panel-desc {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
 }
 .tabs {
-  flex: 1;
-  padding: 0 16px 12px;
   display: flex;
+  flex: 1;
   flex-direction: column;
+  min-height: 0;
 }
 .tabs :deep(.el-tabs__content) {
   flex: 1;
