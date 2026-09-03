@@ -33,7 +33,7 @@
         </el-scrollbar>
         <div class="foot">
           <el-button v-if="!stopDraft" type="danger" :loading="stopping" @click="onStop">停止并保存</el-button>
-          <el-button v-else type="primary" @click="onSave">保存已录步骤</el-button>
+          <el-button v-else type="primary" :loading="saving" @click="onSave">保存已录步骤</el-button>
           <el-button @click="onDiscard">放弃</el-button>
         </div>
       </section>
@@ -64,7 +64,7 @@
       />
       <template #footer>
         <el-button @click="closeAssert">取消</el-button>
-        <el-button type="primary" @click="confirmAssert">确定</el-button>
+        <el-button type="primary" :loading="asserting" @click="confirmAssert">确定</el-button>
       </template>
     </el-dialog>
   </el-dialog>
@@ -96,6 +96,9 @@ const isTextChoice = computed(() => assertChoice.value === 'contains' || assertC
 // 停止产出的草稿:主动停止取 stop API 返回;用户直接关浏览器窗(stopped)时本地兜底
 const stopDraft = ref<{ meta: { start_url: string }; variables: UiVariable[]; steps: UiStep[] } | null>(null)
 const stopping = ref(false)
+// 防重复提交:断言确认 / 保存 await 期间按钮 loading 并早退(与 stopping 同款守卫)
+const asserting = ref(false)
+const saving = ref(false)
 let unsubscribe: (() => void) | null = null
 
 // 中文摘要,与后端 events.step_summary 口径一致
@@ -105,7 +108,7 @@ function summary(s: UiStep): string {
   const map: Record<string, string> = {
     goto: `打开 ${p.url ?? ''}`, click: `点击 ${loc}`, fill: `输入 ${loc}=${p.text ?? ''}`,
     press: `按键 ${p.key ?? ''}`, select_option: `选择 ${loc}=${p.value ?? ''}`,
-    wait: `等待 ${p.ms ?? 0}ms`, set_var: `设变量 ${p.name}`,
+    wait: `等待 ${p.ms ?? 0}ms`, set_var: `设变量 ${p.name}=${p.value ?? ''}`,
     assert_visible: `断言 可见 ${loc}`, assert_exists: `断言 存在 ${loc}`,
     assert_text: `断言 文本${p.mode === 'equals' ? '等于' : '包含'} ${p.text ?? ''}`,
   }
@@ -137,12 +140,14 @@ function onEvent(e: Record<string, unknown>) {
     assertChoice.value = 'assert_visible'
     assertText.value = ''
   } else if (e.type === 'stopped') {
-    if (stopping.value || stopDraft.value) return // 主动停止中,草稿以 stop API 返回为准
+    // 终态即无条件断流:后端关流后 EventSource 会自动重连打到 404 → onerror 误报「连接中断」;
+    // 主动停止(stopping 在途)时这里只断流,草稿仍以随后返回的 stop API 结果为权威。
+    closeStream()
+    if (stopping.value || stopDraft.value) return
     stopDraft.value = localDraft()
-    closeStream() // 会话已终态,及时断流:否则 EventSource 自动重连打到 404 误报「连接中断」
     ElMessage.warning('浏览器窗口已关闭,可保存已录步骤')
   } else if (e.type === 'error') {
-    if (stopDraft.value) return // 录制已结束后的重连失败不必打扰
+    if (stopDraft.value || stopping.value) return // 已终态 / 停止在途:重连失败不必打扰
     ElMessage.error(String(e.message ?? '连接中断'))
   }
 }
@@ -170,12 +175,13 @@ function closeAssert() {
 }
 
 async function confirmAssert() {
-  if (!assertTarget.value || rid.value == null) return
+  if (asserting.value || !assertTarget.value || rid.value == null) return
   const text = assertText.value.trim()
   if (isTextChoice.value && !text) {
     ElMessage.warning('请输入断言文本')
     return
   }
+  asserting.value = true
   try {
     await insertAssert(rid.value, {
       target: assertTarget.value,
@@ -186,6 +192,8 @@ async function confirmAssert() {
     closeAssert()
   } catch (e) {
     ElMessage.error(`添加断言失败:${(e as Error).message}`)
+  } finally {
+    asserting.value = false
   }
 }
 
@@ -203,29 +211,32 @@ async function onStop() {
 }
 
 async function onSave() {
-  if (!stopDraft.value) return
-  let name: string
+  if (saving.value || !stopDraft.value) return
+  saving.value = true
   try {
-    const r = await ElMessageBox.prompt('请输入脚本名称', '保存录制脚本', {
-      confirmButtonText: '保存',
-      cancelButtonText: '取消',
-      inputPattern: /\S+/,
-      inputErrorMessage: '脚本名称不能为空',
-    })
-    name = r.value.trim()
-  } catch {
-    return // 用户取消
-  }
-  const draft = stopDraft.value
-  const doc: UiScriptDoc = {
-    version: 1, meta: draft.meta, variables: draft.variables, steps: draft.steps,
-  }
-  try {
+    let name: string
+    try {
+      const r = await ElMessageBox.prompt('请输入脚本名称', '保存录制脚本', {
+        confirmButtonText: '保存',
+        cancelButtonText: '取消',
+        inputPattern: /\S+/,
+        inputErrorMessage: '脚本名称不能为空',
+      })
+      name = r.value.trim()
+    } catch {
+      return // 用户取消
+    }
+    const draft = stopDraft.value
+    const doc: UiScriptDoc = {
+      version: 1, meta: draft.meta, variables: draft.variables, steps: draft.steps,
+    }
     await createUiScript(props.projectId, { name, script: doc })
     ElMessage.success('脚本已保存')
     emit('saved')
   } catch (e) {
     ElMessage.error(`保存失败:${(e as Error).message}`)
+  } finally {
+    saving.value = false
   }
 }
 

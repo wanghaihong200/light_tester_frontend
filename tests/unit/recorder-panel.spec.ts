@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import ElementPlus, { ElMessageBox } from 'element-plus'
+import ElementPlus, { ElMessage, ElMessageBox } from 'element-plus'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // mock api:捕获 SSE 回调以便注入事件;orig 展开保持模块其他导出真实可用(import 不炸)
@@ -163,5 +163,42 @@ describe('RecorderPanel', () => {
     await flushPromises()
     expect(mocks.cancel).toHaveBeenCalledWith(7)
     expect(w.emitted('closed')).toBeTruthy()
+  })
+
+  it('主动停止在途:stopped 先到也断流,error 不误报「连接中断」,草稿仍以 stop API 为准', async () => {
+    const errSpy = vi.spyOn(ElMessage, 'error')
+    let resolveStop!: (v: unknown) => void
+    mocks.stop.mockImplementation(() => new Promise((res) => { resolveStop = res }))
+    const w = mountPanel()
+    await flushPromises()
+    mocks.fire({ type: 'action', step: { id: 'g1', action: 'goto', params: { url: 'http://x' } } })
+    await w.findAll('button').find((b) => b.text().includes('停止并保存'))!.trigger('click')
+
+    // stop API 尚未返回,后端 _on_close 先经 SSE 推终态 → 立即断流;error 不误报
+    mocks.fire({ type: 'stopped' })
+    mocks.fire({ type: 'error', message: '连接中断' })
+    await flushPromises()
+    expect(mocks.close).toHaveBeenCalled()
+    expect(errSpy).not.toHaveBeenCalledWith('连接中断')
+    expect(w.text()).not.toContain('保存已录步骤') // 在途不本地兜底,等待权威草稿
+
+    resolveStop({ meta: { start_url: 'http://x' }, variables: [], steps: [{ id: 'g1', action: 'goto', params: { url: 'http://x' } }] })
+    await flushPromises()
+    expect(w.text()).toContain('保存已录步骤')
+  })
+
+  it('断言确认防重复提交:await 期间再点确定只插一条', async () => {
+    let resolveInsert!: (v: unknown) => void
+    mocks.insertAssert.mockImplementation(() => new Promise((res) => { resolveInsert = res }))
+    const w = mountPanel()
+    await flushPromises()
+    mocks.fire({ type: 'assert_candidate', target: { tag: 'div', id: 'out' } })
+    await flushPromises()
+    const confirmBtn = () => w.findAll('button').find((b) => b.text().trim() === '确定')!
+    await confirmBtn().trigger('click') // 第一次:进入 await
+    await confirmBtn().trigger('click') // 第二次:守卫早退
+    resolveInsert({ steps: [] })
+    await flushPromises()
+    expect(mocks.insertAssert).toHaveBeenCalledTimes(1)
   })
 })
