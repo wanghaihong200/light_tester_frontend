@@ -106,8 +106,10 @@ async function onSave() {
     ElMessage.success(`登录态「${row.name}」已保存`)
     await reload()
   } catch (e) {
-    collectingId.value = null // 会话已不在,按钮复位,需重新采集
+    // 只有会话确已不在(409 已结束 / 404 不存在)才丢弃 cid 复位;
+    // 其余错误(500/网络)后端槽位与浏览器窗口还占着,保留 cid 让用户可重试保存或取消采集
     const status = e instanceof ApiError ? e.status : 0
+    if (status === 409 || status === 404) collectingId.value = null
     const msg = status === 409 ? '采集会话已结束,请重新采集'
       : status === 404 ? '采集会话不存在,请重新采集'
       : `保存登录态失败:${(e as Error).message}`

@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import ElementPlus, { ElMessage } from 'element-plus'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
+import { ApiError } from '../../src/api/client'
 
 // mock api:orig 展开保持其他导出真实可用(import 不炸)
 const mocks = vi.hoisted(() => ({
@@ -72,7 +73,7 @@ describe('ScriptEditor', () => {
     expect(stepRows(w).length).toBe(before + 1)
   })
 
-  it('保存:已有脚本走 updateUiScript(深拷贝本地 doc)并 emit saved;400 校验错误原样提示', async () => {
+  it('保存:已有脚本走 updateUiScript(深拷贝本地 doc)并 emit saved;保存失败只提示不关闭', async () => {
     const errSpy = vi.spyOn(ElMessage, 'error')
     const w = await mountEditor()
     exposed(w).addStep('wait')
@@ -87,11 +88,11 @@ describe('ScriptEditor', () => {
     expect(body.script).not.toBe(ROW.script)
     expect(w.emitted('saved')).toBeTruthy()
 
-    // 后端 validate_script 拒绝时 400 detail 直接透出
-    mocks.update.mockRejectedValueOnce(new Error('脚本不合法: 步骤1: goto 缺 params.url'))
+    // 保存失败(网络/500,真实 PUT /ui-scripts 不做结构校验):错误 toast、不 emit saved
+    mocks.update.mockRejectedValueOnce(new ApiError(500, 'Internal Server Error'))
     await w.findAll('button').find((b) => b.text().trim() === '保存')!.trigger('click')
     await flushPromises()
-    expect(errSpy).toHaveBeenCalledWith('保存失败:脚本不合法: 步骤1: goto 缺 params.url')
+    expect(errSpy).toHaveBeenCalledWith('保存失败:Internal Server Error')
     expect(w.emitted('saved')).toHaveLength(1) // 失败不关闭
   })
 

@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import ElementPlus, { ElMessageBox } from 'element-plus'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ApiError } from '../../src/api/client'
 
 const mocks = vi.hoisted(() => ({
   list: vi.fn(async () => [
@@ -29,7 +30,6 @@ function mountPane() {
 }
 const btn = (w: ReturnType<typeof mountPane>, text: string) =>
   w.findAll('button').find((b) => b.text().trim() === text)!
-const rows = (w: ReturnType<typeof mountPane>) => w.findAll('.auth-table .el-table__row')
 
 describe('AuthStatesPane', () => {
   beforeEach(() => {
@@ -79,5 +79,28 @@ describe('AuthStatesPane', () => {
     await flushPromises()
     expect(mocks.cancel).toHaveBeenCalledWith(5)
     expect(w.emitted('closed')).toBeTruthy()
+  })
+
+  it('save 抛 500 等非 409/404 错误:保留采集会话可重试保存,不误复位', async () => {
+    const w = mountPane()
+    await flushPromises()
+    const nameInput = w.findAll('input').find((i) => (i.element as HTMLInputElement).placeholder.includes('登录态名称'))!
+    await nameInput.setValue('管理员登录态')
+    await btn(w, '采集新登录态').trigger('click')
+    await flushPromises()
+
+    // 500/网络抖动:后端槽位与浏览器窗口仍占着,cid 不能丢
+    mocks.save.mockRejectedValueOnce(new ApiError(500, 'Internal Server Error'))
+    await btn(w, '保存登录态').trigger('click')
+    await flushPromises()
+    expect(w.text()).toContain('保存登录态')
+    expect(w.text()).toContain('在弹出的浏览器里完成登录后回来点保存')
+    expect(mocks.cancel).not.toHaveBeenCalled()
+
+    // 同一会话直接重试即可成功
+    await btn(w, '保存登录态').trigger('click')
+    await flushPromises()
+    expect(mocks.save).toHaveBeenCalledTimes(2)
+    expect(w.text()).not.toContain('在弹出的浏览器里完成登录后回来点保存')
   })
 })
