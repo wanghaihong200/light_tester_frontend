@@ -1,14 +1,15 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import ElementPlus, { ElMessage } from 'element-plus'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { UiRun, UiScript } from '../../src/types'
 
 // mock api:捕获 SSE 回调以便注入事件;orig 展开保持模块其他导出真实可用(import 不炸)
 const mocks = vi.hoisted(() => {
   let cb: (e: Record<string, unknown>) => void = () => {}
-  // createUiRun 返回值对齐 types.UiRun 真实契约(组件至少消费 id)
+  // createUiRun 返回值对齐 types.UiRun 真实契约(组件至少消费 id);
+  // status 用后端模型默认 pending(models.py UiRun.status default),勿标 running
   const run: import('../../src/types').UiRun = {
-    id: 5, project_id: 1, status: 'running', script_id: 1, script_name: '冒烟脚本',
+    id: 5, project_id: 1, status: 'pending', script_id: 1, script_name: '冒烟脚本',
     mode: 'headless', variables: {}, step_results: [], steps_total: 0,
     steps_passed: 0, steps_failed: 0, error: null, started_at: null, finished_at: null,
   }
@@ -80,6 +81,9 @@ describe('RunDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
 
   it('执行流:index=-1 显示启动浏览器占位,step_end 原位更新并渲染错误与截图', async () => {
     const s = mkScript({ steps: [{ id: 's2', action: 'assert_text', params: { text: '欢迎' } }] })
@@ -110,6 +114,7 @@ describe('RunDialog', () => {
     mocks.fire({ type: 'error', message: '连接中断' })
     await flushPromises()
     expect(w.text()).toContain('通过 1/2 · 耗时 1.5 秒')
+    expect(w.find('.summary').classes()).not.toContain('bad') // 成功终态摘要保持主题色
     expect(mocks.close).toHaveBeenCalled() // 终态即断流,避免 EventSource 重连 404 误报
     expect(w.text()).not.toContain('连接中断')
   })
@@ -201,5 +206,68 @@ describe('RunDialog', () => {
       script_id: 1, mode: 'headless', variables: { kw: '手机' }, auth_state_id: 3,
     })
     expect(mocks.subscribe).toHaveBeenCalledWith(5, expect.any(Function))
+  })
+
+  it('批量队列跨脚本变量隔离:甲填的 kw 不得传给未声明变量的乙', async () => {
+    vi.useFakeTimers()
+    const jia = mkScript({ id: 1, name: '脚本甲', variables: [{ name: 'kw', default: '手机', desc: '搜索关键词' }] })
+    const yi = mkScript({ id: 2, name: '脚本乙' })
+    const w = mountDialog({ projectId: 1, queue: [{ script: jia, mode: 'headless' }, { script: yi, mode: 'headless' }] })
+    await flushPromises()
+    await w.findAll('button').find((b) => b.text().includes('开始执行本脚本'))!.trigger('click')
+    await flushPromises()
+    expect(mocks.create).toHaveBeenNthCalledWith(1, 1, {
+      script_id: 1, mode: 'headless', variables: { kw: '手机' }, auth_state_id: undefined,
+    })
+    mocks.fire({ type: 'done', status: 'completed', summary: { total: 0, passed: 0, failed: 0, duration_ms: 1 } })
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(800) // 甲 done 后的间隔
+    await flushPromises()
+    expect(mocks.create).toHaveBeenNthCalledWith(2, 1, {
+      script_id: 2, mode: 'headless', variables: {}, auth_state_id: undefined, // 探针断言:乙收不到甲的 kw
+    })
+    expect(w.text()).toContain('第 2/2 个:脚本乙')
+  })
+
+  it('snapshot 终态重放:run 建连前已失败时按快照收尾、断流并解阻塞队列,迟到 done 不覆盖结论', async () => {
+    vi.useFakeTimers()
+    const w = mountDialog({
+      projectId: 1,
+      queue: [{ script: mkScript({ id: 1, name: '脚本甲' }), mode: 'headless' },
+              { script: mkScript({ id: 2, name: '脚本乙' }), mode: 'headless' }],
+    })
+    await flushPromises()
+    // 真实契约(ui_runs.py run_events):先发握手 status,再发 snapshot{status,step_results,error,steps_*} 后即 return
+    mocks.fire({ type: 'status', status: 'failed' })
+    mocks.fire({
+      type: 'snapshot', status: 'failed', error: '浏览器启动失败: 快照重放',
+      step_results: [], steps_total: 0, steps_passed: 0, steps_failed: 0,
+    })
+    await flushPromises()
+    expect(w.text()).toContain('浏览器启动失败: 快照重放')
+    expect(w.find('.summary').classes()).toContain('bad') // 失败摘要用危险色(M-3)
+    expect(mocks.close).toHaveBeenCalled() // 终态即断流
+    mocks.fire({ type: 'done', status: 'completed', summary: { total: 3, passed: 3, failed: 0, duration_ms: 5 } })
+    await flushPromises()
+    expect(w.text()).not.toContain('通过 3/3') // 迟到 done 不覆盖 snapshot 结论(M-1)
+    await vi.advanceTimersByTimeAsync(800)
+    await flushPromises()
+    expect(mocks.create).toHaveBeenCalledTimes(2) // 队列已解阻塞,继续跑下一个
+    expect(w.text()).toContain('第 2/2 个:脚本乙')
+  })
+
+  it('执行中卸载组件:断流且队列不再推进,无异常抛出', async () => {
+    vi.useFakeTimers()
+    const w = mountDialog({
+      projectId: 1,
+      queue: [{ script: mkScript(), mode: 'headless' }, { script: mkScript({ id: 2, name: '脚本乙' }), mode: 'headless' }],
+    })
+    await flushPromises()
+    mocks.fire({ type: 'step_start', index: 0 })
+    expect(() => w.unmount()).not.toThrow() // 非 @close 的卸载路径同样走 abortAll
+    expect(mocks.close).toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(2000)
+    await flushPromises()
+    expect(mocks.create).toHaveBeenCalledTimes(1) // 卸载后不再创建后续执行
   })
 })

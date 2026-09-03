@@ -79,7 +79,7 @@
         <el-tag v-if="runStatus !== 'pending'" size="small" :type="statusTag(runStatus)" disable-transitions>
           {{ statusText(runStatus) }}
         </el-tag>
-        <span v-if="summary" class="summary">{{ summary }}</span>
+        <span v-if="summary" class="summary" :class="{ bad: runStatus === 'failed' }">{{ summary }}</span>
       </div>
 
       <div class="runner-body">
@@ -280,6 +280,7 @@ function onRunEvent(e: Record<string, unknown>) {
   } else if (t === 'status') {
     runStatus.value = String(e.status ?? 'running')
   } else if (t === 'done') {
+    if (finished.value) return // 已终态(snapshot/error 先到):迟到 done 不覆盖结论
     const s = (e.summary ?? {}) as { total?: number; passed?: number; duration_ms?: number }
     runStatus.value = e.status === 'failed' ? 'failed' : 'completed'
     summary.value = `通过 ${s.passed ?? 0}/${s.total ?? 0} · 耗时 ${((s.duration_ms ?? 0) / 1000).toFixed(1)} 秒`
@@ -347,6 +348,7 @@ async function startQueue() {
     if (stopped) return
     const item = props.queue[idx.value]
     authId.value = ''
+    varsForm.value = {} // 每脚本重置:上一脚本填的变量不得带给未声明变量的脚本
     if (item.script.script.variables?.length) {
       await collectPreRun(item.script)
       if (stopped) return
@@ -364,13 +366,19 @@ async function startQueue() {
   emit('closed')
 }
 
-function onClose() {
+// 停队列、断流、放行挂起的 async 帧(runPromise/varsResolve),避免组件实例悬挂泄漏。
+// 两条路径共用:右上 X(@close → onClose)与父级直接卸载(切 tab 摘掉 v-if,@close 不触发)。
+function abortAll() {
   stopped = true
   closeStreams()
   releaseRun?.()
   releaseRun = null
   varsResolve?.()
   varsResolve = null
+}
+
+function onClose() {
+  abortAll()
   emit('closed')
 }
 
@@ -382,10 +390,7 @@ function runShotUrl(file: string): string {
 }
 
 if (props.queue.length) startQueue()
-onBeforeUnmount(() => {
-  stopped = true
-  closeStreams()
-})
+onBeforeUnmount(abortAll)
 </script>
 
 <style scoped>
@@ -483,6 +488,9 @@ onBeforeUnmount(() => {
   font-weight: 400;
   font-size: 13px;
   color: var(--el-color-primary);
+}
+.queue-head .summary.bad {
+  color: var(--el-color-danger); /* 失败终态摘要用危险色,与主题蓝区分 */
 }
 .runner-body {
   flex: 1;
