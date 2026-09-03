@@ -1,5 +1,5 @@
 import type {
-  UiAuthState, UiRun, UiScript, UiScriptDoc, UiStep,
+  UiAuthState, UiRun, UiScript, UiScriptDoc, UiStep, UiVariable,
 } from '../types'
 import { http } from './client'
 
@@ -24,7 +24,7 @@ export function deleteUiScript(id: number) {
 // 录制会话
 export function startRecording(projectId: number, authStateId?: number) {
   return http.post<{ recording_id: number }>(`/projects/${projectId}/ui-recordings`,
-    authStateId ? { auth_state_id: authStateId } : {})
+    authStateId != null ? { auth_state_id: authStateId } : {})
 }
 export function insertAssert(recordingId: number, body: {
   target: Record<string, unknown>; assert_type: string; text?: string; mode?: string
@@ -32,7 +32,7 @@ export function insertAssert(recordingId: number, body: {
   return http.post<{ steps: UiStep[] }>(`/ui-recordings/${recordingId}/assert`, body)
 }
 export function stopRecording(recordingId: number) {
-  return http.post<{ meta: { start_url: string }; variables: never[]; steps: UiStep[] }>(
+  return http.post<{ meta: { start_url: string }; variables: UiVariable[]; steps: UiStep[] }>(
     `/ui-recordings/${recordingId}/stop`)
 }
 export function cancelRecording(recordingId: number) {

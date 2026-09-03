@@ -81,11 +81,14 @@ onMounted(reload)
 function onSelectionChange(rows: UiScript[]) { selected.value = rows }
 function onRecord() { recording.value = true }
 function onEdit(row: UiScript) { editing.value = row }
-function onRun(row: UiScript) { runQueue.value = [{ script: row, mode: 'headless' }] }
+// 执行队列与历史模式互斥:RunDialog 只吃其中一路,开一路时清掉另一路
+function onRun(row: UiScript) { runQueue.value = [{ script: row, mode: 'headless' }]; history.value = null }
 function onBatchRun() {
   runQueue.value = selected.value.map((s) => ({ script: s, mode: 'headless' as const }))
+  history.value = null
 }
 async function onHistory(row: UiScript) {
+  runQueue.value = []
   try {
     const runs = await listUiRuns(props.projectId, row.id)
     history.value = { script: row, runs }
