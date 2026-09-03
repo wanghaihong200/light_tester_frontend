@@ -18,6 +18,9 @@
         <el-tab-pane label="自动化工程" name="repo">
           <RepoPane v-if="project && tab === 'repo'" :project-id="project.id" :project="project" />
         </el-tab-pane>
+        <el-tab-pane label="Web自动化" name="webauto">
+          <WebAutoPane v-if="project && tab === 'webauto'" :project-id="project.id" />
+        </el-tab-pane>
       </el-tabs>
     </div>
   </div>
@@ -31,6 +34,7 @@ import DocumentsPane from '../components/DocumentsPane.vue'
 import JobsPane from '../components/JobsPane.vue'
 import MindmapPane from '../components/MindmapPane.vue'
 import RepoPane from '../components/RepoPane.vue'
+import WebAutoPane from '../components/webauto/WebAutoPane.vue'
 import { listProjects } from '../api/projects'
 import { useTabs } from '../composables/useTabs'
 import type { Project } from '../types'

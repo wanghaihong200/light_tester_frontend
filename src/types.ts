@@ -144,3 +144,45 @@ export interface PushResult {
   commit_short: string
   pushed_files: string[]
 }
+
+// ── UI 自动化 ──────────────────────────────
+export interface UiLocator {
+  strategy: 'test_id' | 'role' | 'placeholder' | 'label' | 'text' | 'css'
+  role?: string
+  name?: string
+  value?: string
+  fallbacks?: UiLocator[]
+}
+export interface UiStep {
+  id: string
+  action: string
+  locator?: UiLocator
+  params?: Record<string, unknown>
+}
+export interface UiVariable { name: string; default?: string; desc?: string }
+export interface UiScriptDoc {
+  version: number
+  meta: { start_url: string }
+  variables: UiVariable[]
+  steps: UiStep[]
+}
+export interface UiScript {
+  id: number; project_id: number; name: string
+  description: string | null; script: UiScriptDoc
+  created_at: string; updated_at: string
+}
+export interface UiStepResult {
+  index: number; step_id: string; action: string
+  status: 'passed' | 'failed'; error: string | null
+  screenshot: string | null; elapsed_ms: number
+}
+export interface UiRun {
+  id: number; project_id: number
+  status: 'pending' | 'running' | 'completed' | 'failed'
+  script_id: number; script_name: string; mode: string
+  variables: Record<string, string>
+  step_results: UiStepResult[]
+  steps_total: number; steps_passed: number; steps_failed: number
+  error: string | null; started_at: string | null; finished_at: string | null
+}
+export interface UiAuthState { id: number; project_id: number; name: string; created_at: string }
