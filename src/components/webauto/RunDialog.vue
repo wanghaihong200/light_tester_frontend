@@ -79,7 +79,14 @@
         <el-tag v-if="runStatus !== 'pending'" size="small" :type="statusTag(runStatus)" disable-transitions>
           {{ statusText(runStatus) }}
         </el-tag>
+        <el-tag v-if="allDone" size="small" type="success" disable-transitions>全部执行完毕</el-tag>
         <span v-if="summary" class="summary" :class="{ bad: runStatus === 'failed' }">{{ summary }}</span>
+        <span class="spacer" />
+        <el-button
+          v-if="!historyMode && running && !finished"
+          size="small" type="danger" plain :loading="forcing" @click="onForceFinish"
+        >强制结束</el-button>
+        <el-button v-if="allDone" size="small" @click="onClose">关闭</el-button>
       </div>
 
       <div class="runner-body">
@@ -151,9 +158,9 @@
 //    done/error 即终态断流,800ms 后跑下一个;
 //    入口 4xx(脚本不合法/无效 script_id/auth_state_id)透传 detail,跳过该脚本继续队列。
 //  - history 模式:只读回看历史执行,点选左侧 run 渲染每步结果与截图,无 SSE。
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { createUiRun, listUiAuthStates, subscribeRunEvents } from '../../api/uiAutomation'
+import { createUiRun, forceFinishRun, listUiAuthStates, subscribeRunEvents } from '../../api/uiAutomation'
 import type { UiAuthState, UiRun, UiScript, UiStep, UiStepResult } from '../../types'
 
 type QueueItem = { script: UiScript; mode: 'headless' | 'headed' }
@@ -229,6 +236,7 @@ let varsResolve: (() => void) | null = null
 
 const current = computed<QueueItem | null>(() =>
   idx.value >= 0 && idx.value < props.queue.length ? props.queue[idx.value] : null)
+const allDone = ref(false) // 批量全部跑完:停汇总页,由用户手动关闭(拍板 2026-09-04)
 
 function stepLabel(index: number): string {
   const s = current.value?.script.script.steps[index]
@@ -303,8 +311,32 @@ function onRunEvent(e: Record<string, unknown>) {
   }
 }
 
-async function runOne(item: QueueItem, vars: Record<string, string>, authStateId?: number) {
-  logs.value = []
+// 强制结束(2026-09-04 需求:异常挂起在「执行中」时手动收口):后端置「执行异常」并向 SSE 推
+// done;本地同时收尾放行队列(双路径幂等,后到者被 finished 守卫忽略),800ms 后继续下一个脚本
+const forcing = ref(false)
+async function onForceFinish() {
+  if (running.value == null || finished.value || forcing.value) return
+  try {
+    await ElMessageBox.confirm('确定强制结束当前执行?状态将记为「执行异常」。', '强制结束', {
+      confirmButtonText: '强制结束', cancelButtonText: '取消', type: 'warning',
+    })
+  } catch {
+    return // 用户取消
+  }
+  forcing.value = true
+  try {
+    await forceFinishRun(running.value.id)
+    runStatus.value = 'failed'
+    summary.value = '执行异常 · 用户强制结束'
+    finish()
+  } catch (e) {
+    ElMessage.error(`强制结束失败:${(e as Error).message}`)
+  } finally {
+    forcing.value = false
+  }
+}
+
+async function runOne(item: QueueItem, vars: Record<string, string>, authStateId?: number) {  logs.value = []
   frame.value = ''
   frameStep.value = -1
   summary.value = ''
@@ -375,7 +407,8 @@ async function startQueue() {
     if (stopped) return
     await new Promise((r) => setTimeout(r, 800)) // 两个脚本间留出间隔,便于看清结果
   }
-  emit('closed')
+  // 拍板(2026-09-04):批量跑完停汇总页不自动关框,用户手动关闭
+  allDone.value = true
 }
 
 // 停队列、断流、放行挂起的 async 帧(runPromise/varsResolve),避免组件实例悬挂泄漏。
@@ -509,6 +542,9 @@ onBeforeUnmount(abortAll)
 }
 .queue-head .summary.bad {
   color: var(--el-color-danger); /* 失败终态摘要用危险色,与主题蓝区分 */
+}
+.queue-head .spacer {
+  flex: 1;
 }
 .runner-body {
   flex: 1;

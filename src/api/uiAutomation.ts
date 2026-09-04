@@ -49,6 +49,9 @@ export function getUiRun(id: number) { return http.get<UiRun>(`/ui-runs/${id}`) 
 export function listUiRuns(projectId: number, scriptId?: number) {
   return http.get<UiRun[]>(`/projects/${projectId}/ui-runs${scriptId ? `?script_id=${scriptId}` : ''}`)
 }
+export function forceFinishRun(id: number) {
+  return http.post<UiRun>(`/ui-runs/${id}/force-finish`)
+}
 
 // 登录态
 export function listUiAuthStates(projectId: number) {

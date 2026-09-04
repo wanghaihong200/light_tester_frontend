@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import ElementPlus, { ElMessage } from 'element-plus'
+import ElementPlus, { ElMessage, ElMessageBox } from 'element-plus'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { UiRun, UiScript } from '../../src/types'
 
@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => {
     close: vi.fn(),
     // 默认无登录态:无变量脚本直接跑(确认面板基线);登录态专项用例内显式覆盖
     listAuth: vi.fn(async () => []),
+    forceFinish: vi.fn(async () => ({ ...run, status: 'failed', error: '执行异常: 用户强制结束' })),
     fire: (e: Record<string, unknown>) => cb(e),
   }
 })
@@ -27,6 +28,7 @@ vi.mock('../../src/api/uiAutomation', async (orig) => ({
   createUiRun: mocks.create,
   subscribeRunEvents: mocks.subscribe,
   listUiAuthStates: mocks.listAuth,
+  forceFinishRun: mocks.forceFinish,
 }))
 
 import RunDialog from '../../src/components/webauto/RunDialog.vue'
@@ -321,6 +323,39 @@ describe('RunDialog', () => {
     await flushPromises()
     expect(mocks.create).toHaveBeenCalledTimes(2) // 队列已解阻塞,继续跑下一个
     expect(w.text()).toContain('第 2/2 个:脚本乙')
+  })
+
+  it('批量跑完停汇总页:不自动关框,出现「全部执行完毕」与关闭按钮,手动关才 emit closed(拍板落地)', async () => {
+    vi.useFakeTimers()
+    const w = mountDialog({ projectId: 1, queue: [{ script: mkScript(), mode: 'headless' }] })
+    await flushPromises()
+    mocks.fire({ type: 'done', status: 'completed', summary: { total: 1, passed: 1, failed: 0, duration_ms: 100 } })
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(900) // 越过脚本间隔:过去在这里自动关框
+    await flushPromises()
+    expect(w.text()).toContain('全部执行完毕')
+    expect(w.emitted('closed')).toBeFalsy() // 停在汇总页
+    await w.findAll('button').find((b) => b.text().trim() === '关闭')!.trigger('click')
+    await flushPromises()
+    expect(w.emitted('closed')).toBeTruthy()
+  })
+
+  it('强制结束:确认后调 force-finish,本地按「执行异常」收尾并继续队列(需求2)', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue({} as never)
+    const s1 = mkScript({ id: 1, name: '脚本甲' })
+    const s2 = mkScript({ id: 2, name: '脚本乙' })
+    const w = mountDialog({ projectId: 1, queue: [{ script: s1, mode: 'headless' }, { script: s2, mode: 'headless' }] })
+    await flushPromises()
+    mocks.fire({ type: 'step_start', index: 0 }) // 甲执行中
+    await flushPromises()
+    await w.findAll('button').find((b) => b.text().includes('强制结束'))!.trigger('click')
+    await flushPromises()
+    expect(mocks.forceFinish).toHaveBeenCalledWith(5)
+    expect(w.text()).toContain('执行异常 · 用户强制结束')
+    await vi.advanceTimersByTimeAsync(900) // 放行后队列继续下一个
+    await flushPromises()
+    expect(mocks.create).toHaveBeenCalledTimes(2) // 乙接着跑
   })
 
   it('执行中卸载组件:断流且队列不再推进,无异常抛出', async () => {
