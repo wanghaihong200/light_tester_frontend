@@ -8,11 +8,13 @@ import { ApiError } from '../../src/api/client'
 const mocks = vi.hoisted(() => ({
   update: vi.fn(async () => ({ id: 1 })),
   create: vi.fn(async () => ({ id: 2 })),
+  listAuth: vi.fn(async () => [] as { id: number; project_id: number; name: string; created_at: string }[]),
 }))
 vi.mock('../../src/api/uiAutomation', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
   updateUiScript: mocks.update,
   createUiScript: mocks.create,
+  listUiAuthStates: mocks.listAuth,
 }))
 
 import ScriptEditor from '../../src/components/webauto/ScriptEditor.vue'
@@ -71,6 +73,30 @@ describe('ScriptEditor', () => {
     await nextTick()
     expect(exposed(w).doc.steps.length).toBe(before + 1)
     expect(stepRows(w).length).toBe(before + 1)
+  })
+
+  it('登录态(功能1):「不使用」保存后清除 meta.auth_state_id;已删登录态回退不使用', async () => {
+    mocks.listAuth.mockResolvedValueOnce([{ id: 3, project_id: 1, name: 'testerhome', created_at: '2026-09-03T10:00:00' }])
+    const row = structuredClone(ROW)
+    ;(row.script.meta as Record<string, unknown>).auth_state_id = 3
+    const w = await mountEditor({ projectId: 1, scriptRow: row })
+    expect(w.findComponent({ name: 'ElSelect' }).props('modelValue')).toBe(3) // 初始=录制值
+
+    await w.findComponent({ name: 'ElSelect' }).vm.$emit('update:modelValue', '') // 改回「不使用」
+    await w.findAll('button').find((b) => b.text().trim() === '保存')!.trigger('click')
+    await flushPromises()
+    expect(mocks.update.mock.calls[0][1].script.meta.auth_state_id).toBeUndefined()
+  })
+
+  it('登录态(功能1):录制时选的登录态已被删除 → 打开即回退「不使用」,保存清除该键', async () => {
+    mocks.listAuth.mockResolvedValueOnce([{ id: 3, project_id: 1, name: 'testerhome', created_at: '2026-09-03T10:00:00' }])
+    const row = structuredClone(ROW)
+    ;(row.script.meta as Record<string, unknown>).auth_state_id = 99
+    const w = await mountEditor({ projectId: 1, scriptRow: row })
+    expect(w.findComponent({ name: 'ElSelect' }).props('modelValue')).toBe('') // 回退
+    await w.findAll('button').find((b) => b.text().trim() === '保存')!.trigger('click')
+    await flushPromises()
+    expect(mocks.update.mock.calls[0][1].script.meta.auth_state_id).toBeUndefined()
   })
 
   it('保存:已有脚本走 updateUiScript(深拷贝本地 doc)并 emit saved;保存失败只提示不关闭', async () => {

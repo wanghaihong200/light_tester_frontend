@@ -28,9 +28,9 @@ vi.mock('../../src/api/uiAutomation', async (orig) => ({
 
 import RecorderPanel from '../../src/components/webauto/RecorderPanel.vue'
 
-function mountPanel() {
+function mountPanel(props: Record<string, unknown> = {}) {
   return mount(RecorderPanel, {
-    props: { projectId: 1 },
+    props: { projectId: 1, ...props },
     global: { plugins: [ElementPlus] },
   })
 }
@@ -43,13 +43,21 @@ describe('RecorderPanel', () => {
   it('挂载即启动录制并订阅 SSE,action 事件实时追加步骤文案', async () => {
     const w = mountPanel()
     await flushPromises()
-    expect(mocks.start).toHaveBeenCalledWith(1)
+    expect(mocks.start).toHaveBeenCalledWith(1, undefined)
     expect(mocks.subscribe).toHaveBeenCalledWith(7, expect.any(Function))
 
     mocks.fire({ type: 'action', step: { id: 's1', action: 'click', locator: { strategy: 'css', value: '#go' } } })
+    mocks.fire({ type: 'action', step: { id: 's2', action: 'scroll', params: { dx: 0, dy: 600 } } })
     await flushPromises()
     expect(w.text()).toContain('点击 #go')
-    expect(w.findAll('.rec-step').length).toBe(1)
+    expect(w.text()).toContain('滚动 横向0 纵向600') // scroll 步骤摘要(滚轮/拖滚动条录制)
+    expect(w.findAll('.rec-step').length).toBe(2)
+  })
+
+  it('带登录态启动:authStateId prop 透传给 startRecording,录制浏览器以该身份打开', async () => {
+    mountPanel({ authStateId: 3 })
+    await flushPromises()
+    expect(mocks.start).toHaveBeenCalledWith(1, 3)
   })
 
   it('连续同 id 的 action 原位刷新,不重复追加(逐字输入合并)', async () => {
@@ -130,6 +138,26 @@ describe('RecorderPanel', () => {
       },
     })
     expect(w.emitted('saved')).toBeTruthy()
+  })
+
+  it('带登录态录制保存:meta 写入 auth_state_id,执行默认带上(功能1)', async () => {
+    vi.spyOn(ElMessageBox, 'prompt').mockResolvedValue({ value: '带态脚本' } as never)
+    const w = mountPanel({ authStateId: 3 })
+    await flushPromises()
+    mocks.fire({ type: 'action', step: { id: 'g1', action: 'goto', params: { url: 'http://x' } } })
+    mocks.fire({ type: 'stopped' })
+    await flushPromises()
+    await w.findAll('button').find((b) => b.text().includes('保存已录步骤'))!.trigger('click')
+    await flushPromises()
+    expect(mocks.create).toHaveBeenCalledWith(1, {
+      name: '带态脚本',
+      script: {
+        version: 1,
+        meta: { start_url: 'http://x', auth_state_id: 3 },
+        variables: [],
+        steps: [{ id: 'g1', action: 'goto', params: { url: 'http://x' } }],
+      },
+    })
   })
 
   it('stopped 事件(用户直接关浏览器窗)→ 出现「保存已录步骤」,保存走本地草稿不再调 stop', async () => {

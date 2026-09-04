@@ -17,7 +17,8 @@ const mocks = vi.hoisted(() => {
     create: vi.fn(async () => run),
     subscribe: vi.fn((_id: number, c: (e: Record<string, unknown>) => void) => { cb = c; return mocks.close }),
     close: vi.fn(),
-    listAuth: vi.fn(async () => [{ id: 3, project_id: 1, name: '管理员登录态', created_at: '2026-09-02T10:00:00' }]),
+    // 默认无登录态:无变量脚本直接跑(确认面板基线);登录态专项用例内显式覆盖
+    listAuth: vi.fn(async () => []),
     fire: (e: Record<string, unknown>) => cb(e),
   }
 })
@@ -156,6 +157,13 @@ describe('RunDialog', () => {
     expect(w.text()).toContain('文本不匹配') // 默认选中第一条,直接可看步骤详情
     expect(w.html()).toContain('/api/ui-runs/5/screens/step_1_failed.jpg')
     expect(w.findAll('.row-failed').length).toBe(1) // 失败步骤红标
+    // 功能2:每张缩略图的预览列表 = 该 run 全部截图(2 张),查看器内可前后切换
+    for (const img of w.findAllComponents({ name: 'ElImage' })) {
+      expect(img.props('previewSrcList')).toEqual([
+        '/api/ui-runs/5/screens/step_0_passed.jpg',
+        '/api/ui-runs/5/screens/step_1_failed.jpg',
+      ])
+    }
 
     await w.findAll('.run-item')[1].trigger('click') // 点选第二条 → 切换渲染该 run 的结果
     expect(w.text()).toContain('fill')
@@ -189,7 +197,66 @@ describe('RunDialog', () => {
     })
   })
 
+  it('录制带登录态的无变量脚本:直接默认执行不弹面板,auth_state_id 自动带上(功能1)', async () => {
+    mocks.listAuth.mockResolvedValueOnce([{ id: 3, project_id: 1, name: 'testerhome', created_at: '2026-09-03T10:00:00' }])
+    const s = mkScript({ name: '带态脚本' })
+    ;(s.script.meta as Record<string, unknown>).auth_state_id = 3
+    const w = mountDialog({ projectId: 1, queue: [{ script: s, mode: 'headless' }] })
+    await flushPromises()
+    expect(w.text()).not.toContain('开始执行本脚本') // 无面板,直跑
+    expect(mocks.create).toHaveBeenCalledWith(1, {
+      script_id: 1, mode: 'headless', variables: {}, auth_state_id: 3,
+    })
+  })
+
+  it('录制带登录态且有变量的脚本:面板只为变量弹,登录态预选录制值(功能1)', async () => {
+    mocks.listAuth.mockResolvedValueOnce([{ id: 3, project_id: 1, name: 'testerhome', created_at: '2026-09-03T10:00:00' }])
+    const s = mkScript({ variables: [{ name: 'kw', default: '手机', desc: '搜索关键词' }] })
+    ;(s.script.meta as Record<string, unknown>).auth_state_id = 3
+    const w = mountDialog({ projectId: 1, queue: [{ script: s, mode: 'headless' }] })
+    await flushPromises()
+    expect(w.text()).toContain('开始执行本脚本') // 面板在(变量要收集)
+    await w.findAll('button').find((b) => b.text().includes('开始执行本脚本'))!.trigger('click')
+    await flushPromises()
+    // 不碰下拉直接确认:预选的录制登录态生效
+    expect(mocks.create).toHaveBeenCalledWith(1, {
+      script_id: 1, mode: 'headless', variables: { kw: '手机' }, auth_state_id: 3,
+    })
+  })
+
+  it('录制时选的登录态已被删除:回退为询问(面板弹,默认不使用)(功能1 兜底)', async () => {
+    mocks.listAuth.mockResolvedValueOnce([{ id: 3, project_id: 1, name: 'testerhome', created_at: '2026-09-03T10:00:00' }])
+    const s = mkScript({ name: '失态脚本' })
+    ;(s.script.meta as Record<string, unknown>).auth_state_id = 99 // 已不存在
+    const w = mountDialog({ projectId: 1, queue: [{ script: s, mode: 'headless' }] })
+    await flushPromises()
+    expect(w.text()).toContain('开始执行本脚本')
+    await w.findAll('button').find((b) => b.text().includes('开始执行本脚本'))!.trigger('click')
+    await flushPromises()
+    expect(mocks.create).toHaveBeenCalledWith(1, {
+      script_id: 1, mode: 'headless', variables: {}, auth_state_id: undefined,
+    })
+  })
+
+  it('无变量脚本 + 项目存在登录态:也出确认面板提供登录态入口,确认后带 auth_state_id 执行', async () => {
+    mocks.listAuth.mockResolvedValueOnce([{ id: 3, project_id: 1, name: '管理员登录态', created_at: '2026-09-02T10:00:00' }])
+    const w = mountDialog({ projectId: 1, queue: [{ script: mkScript({ name: '无变量脚本' }), mode: 'headless' }] })
+    await flushPromises()
+    expect(mocks.create).not.toHaveBeenCalled() // 面板先出,不直接开跑
+    expect(w.text()).toContain('执行「无变量脚本」前请确认参数')
+    expect(w.text()).toContain('登录态')
+
+    await w.findComponent({ name: 'ElSelect' }).vm.$emit('update:modelValue', 3) // 选登录态
+    await flushPromises()
+    await w.findAll('button').find((b) => b.text().includes('开始执行本脚本'))!.trigger('click')
+    await flushPromises()
+    expect(mocks.create).toHaveBeenCalledWith(1, {
+      script_id: 1, mode: 'headless', variables: {}, auth_state_id: 3,
+    })
+  })
+
   it('声明变量的脚本先在本对话框内收集变量与登录态,点「开始执行本脚本」才创建执行', async () => {
+    mocks.listAuth.mockResolvedValueOnce([{ id: 3, project_id: 1, name: '管理员登录态', created_at: '2026-09-02T10:00:00' }])
     const s = mkScript({ variables: [{ name: 'kw', default: '手机', desc: '搜索关键词' }] })
     const w = mountDialog({ projectId: 1, queue: [{ script: s, mode: 'headless' }] })
     await flushPromises()

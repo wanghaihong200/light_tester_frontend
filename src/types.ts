@@ -162,7 +162,7 @@ export interface UiStep {
 export interface UiVariable { name: string; default?: string; desc?: string }
 export interface UiScriptDoc {
   version: number
-  meta: { start_url: string }
+  meta: { start_url: string; auth_state_id?: number } // auth_state_id:录制时用的登录态,执行默认带上
   variables: UiVariable[]
   steps: UiStep[]
 }

@@ -59,7 +59,7 @@
                 v-if="row.screenshot"
                 class="shot"
                 :src="shotUrl(row.screenshot)"
-                :preview-src-list="[shotUrl(row.screenshot)]"
+                :preview-src-list="historyShots"
                 preview-teleported
                 hide-on-click-modal
                 fit="cover"
@@ -93,7 +93,7 @@
           </div>
         </section>
 
-        <!-- 步骤 1:脚本声明了变量时,先在同一对话框内收集变量与登录态 -->
+        <!-- 步骤 1:脚本声明了变量、或项目存在登录态时,先在同一对话框内收集变量与登录态 -->
         <section v-if="waitingVars" class="side-pane">
           <div class="pane-head">执行「{{ waitingVars.name }}」前请确认参数</div>
           <div class="vars-body">
@@ -129,7 +129,7 @@
                 v-if="l.screenshot && running"
                 class="shot"
                 :src="runShotUrl(l.screenshot)"
-                :preview-src-list="[runShotUrl(l.screenshot)]"
+                :preview-src-list="runShots"
                 preview-teleported
                 hide-on-click-modal
                 fit="cover"
@@ -204,6 +204,7 @@ function stepSummary(s: UiStep): string {
     goto: `打开 ${p.url ?? ''}`, click: `点击 ${loc}`, fill: `输入 ${loc}=${p.text ?? ''}`,
     press: `按键 ${p.key ?? ''}`, select_option: `选择 ${loc}=${p.value ?? ''}`,
     wait: `等待 ${p.ms ?? 0}ms`, set_var: `设变量 ${p.name}=${p.value ?? ''}`,
+    scroll: `滚动 横向${p.dx ?? 0} 纵向${p.dy ?? 0}`,
     assert_visible: `断言 可见 ${loc}`, assert_exists: `断言 存在 ${loc}`,
     assert_text: `断言 文本${p.mode === 'equals' ? '等于' : '包含'} ${p.text ?? ''}`,
   }
@@ -318,16 +319,23 @@ async function runOne(item: QueueItem, vars: Record<string, string>, authStateId
   })
 }
 
-// 执行前参数确认(同一对话框内分步,不套第二个 dialog):脚本声明了变量才出面板,
-// 表单预填 default;面板内存在可用登录态才出下拉(默认「不使用」)。
+// 执行前参数确认(同一对话框内分步,不套第二个 dialog):脚本声明了变量、或「项目存在
+// 可用登录态但脚本没录登录态」才出面板;录了登录态的无变量脚本直接默认执行不询问(拍板:
+// 变更入口在脚本编辑页)。表单预填 default;面板内存在可用登录态才出下拉(默认=录制的登录态)。
 const waitingVars = ref<UiScript | null>(null)
 const varsForm = ref<Record<string, string>>({})
 const authStates = ref<UiAuthState[]>([])
 const authId = ref<number | ''>('') // '' = 不使用登录态
 
+// 脚本录制时用的登录态(仍在可用列表才有效;被删则视为没录,回退询问)
+function recordedAuth(script: UiScript): number | null {
+  const id = script.script.meta?.auth_state_id
+  return id != null && authStates.value.some((a) => a.id === id) ? id : null
+}
+
 async function collectPreRun(script: UiScript) {
   varsForm.value = Object.fromEntries((script.script.variables ?? []).map((v) => [v.name, v.default ?? '']))
-  authId.value = ''
+  authId.value = recordedAuth(script) ?? ''
   waitingVars.value = script
   await new Promise<void>((r) => { varsResolve = r }) // 模板「开始执行本脚本」按钮触发
   waitingVars.value = null
@@ -347,11 +355,15 @@ async function startQueue() {
   for (idx.value = 0; idx.value < props.queue.length; idx.value++) {
     if (stopped) return
     const item = props.queue[idx.value]
-    authId.value = ''
     varsForm.value = {} // 每脚本重置:上一脚本填的变量不得带给未声明变量的脚本
-    if (item.script.script.variables?.length) {
+    const rec = recordedAuth(item.script)
+    // 出面板条件:有变量要收集;或需要用户选登录态(项目有登录态但脚本没录)。录了登录态
+    // 且无变量的脚本在此直跑,批量不顺停(有变量才停在变量表单)
+    if (item.script.script.variables?.length || (authStates.value.length && rec == null)) {
       await collectPreRun(item.script)
       if (stopped) return
+    } else {
+      authId.value = rec ?? ''
     }
     try {
       await runOne(item, { ...varsForm.value }, authId.value === '' ? undefined : authId.value)
@@ -388,6 +400,12 @@ function shotUrl(file: string): string {
 function runShotUrl(file: string): string {
   return running.value ? `/api/ui-runs/${running.value.id}/screens/${file}` : ''
 }
+
+// 大图查看器的完整截图列表:el-image 以点击项在列表中的位置为起点,前后箭头跨步切换
+const historyShots = computed(() =>
+  (selectedRun.value?.step_results ?? []).filter((r) => r.screenshot).map((r) => shotUrl(r.screenshot!)))
+const runShots = computed(() =>
+  logs.value.filter((l) => l.screenshot).map((l) => runShotUrl(l.screenshot!)))
 
 if (props.queue.length) startQueue()
 onBeforeUnmount(abortAll)

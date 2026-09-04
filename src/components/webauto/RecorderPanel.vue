@@ -82,7 +82,8 @@ import {
 } from '../../api/uiAutomation'
 import type { UiScriptDoc, UiStep, UiVariable } from '../../types'
 
-const props = defineProps<{ projectId: number }>()
+// authStateId:父级(WebAutoPane 录制入口选择框)选定的登录态,启动录制浏览器时注入
+const props = defineProps<{ projectId: number; authStateId?: number }>()
 const emit = defineEmits<{ (e: 'saved'): void; (e: 'closed'): void }>()
 
 const rid = ref<number | null>(null)
@@ -109,6 +110,7 @@ function summary(s: UiStep): string {
     goto: `打开 ${p.url ?? ''}`, click: `点击 ${loc}`, fill: `输入 ${loc}=${p.text ?? ''}`,
     press: `按键 ${p.key ?? ''}`, select_option: `选择 ${loc}=${p.value ?? ''}`,
     wait: `等待 ${p.ms ?? 0}ms`, set_var: `设变量 ${p.name}=${p.value ?? ''}`,
+    scroll: `滚动 横向${p.dx ?? 0} 纵向${p.dy ?? 0}`,
     assert_visible: `断言 可见 ${loc}`, assert_exists: `断言 存在 ${loc}`,
     assert_text: `断言 文本${p.mode === 'equals' ? '等于' : '包含'} ${p.text ?? ''}`,
   }
@@ -159,7 +161,7 @@ function closeStream() {
 
 async function begin() {
   try {
-    const { recording_id } = await startRecording(props.projectId)
+    const { recording_id } = await startRecording(props.projectId, props.authStateId)
     rid.value = recording_id
     unsubscribe = subscribeRecordingEvents(recording_id, onEvent)
   } catch (e) {
@@ -227,8 +229,11 @@ async function onSave() {
       return // 用户取消
     }
     const draft = stopDraft.value
+    // 录制时选定的登录态写进 meta:执行默认带上(选择框"不使用"则不写该键)
+    const meta = { ...draft.meta }
+    if (props.authStateId != null) meta.auth_state_id = props.authStateId
     const doc: UiScriptDoc = {
-      version: 1, meta: draft.meta, variables: draft.variables, steps: draft.steps,
+      version: 1, meta, variables: draft.variables, steps: draft.steps,
     }
     await createUiScript(props.projectId, { name, script: doc })
     ElMessage.success('脚本已保存')

@@ -17,6 +17,12 @@
           <el-form-item label="起始 URL">
             <el-input v-model="doc.meta.start_url" placeholder="https://example.com/login" />
           </el-form-item>
+          <el-form-item label="登录态">
+            <el-select v-model="authSel" placeholder="不使用">
+              <el-option label="不使用" value="" />
+              <el-option v-for="a in authStates" :key="a.id" :label="a.name" :value="a.id" />
+            </el-select>
+          </el-form-item>
           <el-form-item label="描述">
             <el-input v-model="description" placeholder="选填" maxlength="500" />
           </el-form-item>
@@ -154,14 +160,14 @@
 // 结构化输入为主(action 下拉 / 定位弹层 / 按 PARAM_FIELDS 生成的参数项),不做 JSON 手写域。
 // 后端 validate_script 才是权威校验,400 detail 原样透出即可。
 import { ElMessage } from 'element-plus'
-import { ref, toRaw } from 'vue'
-import { createUiScript, updateUiScript } from '../../api/uiAutomation'
-import type { UiLocator, UiScript, UiScriptDoc, UiStep } from '../../types'
+import { onMounted, ref, toRaw } from 'vue'
+import { createUiScript, listUiAuthStates, updateUiScript } from '../../api/uiAutomation'
+import type { UiAuthState, UiLocator, UiScript, UiScriptDoc, UiStep } from '../../types'
 
 const props = defineProps<{ projectId: number; scriptRow: UiScript | null }>()
 const emit = defineEmits<{ (e: 'saved'): void; (e: 'closed'): void }>()
 
-const ACTIONS = ['goto', 'click', 'fill', 'press', 'select_option', 'wait', 'set_var',
+const ACTIONS = ['goto', 'click', 'fill', 'press', 'select_option', 'wait', 'set_var', 'scroll',
   'assert_visible', 'assert_text', 'assert_exists'] as const
 const STRATEGIES = ['test_id', 'role', 'placeholder', 'label', 'text', 'css'] as const
 const NEED_LOCATOR = ['click', 'fill', 'press', 'select_option', 'assert_visible', 'assert_text', 'assert_exists']
@@ -172,6 +178,7 @@ const PARAM_FIELDS: Record<string, { key: string; label: string; type?: 'number'
   press: [{ key: 'key', label: '键名' }],
   select_option: [{ key: 'value', label: '选项值' }],
   wait: [{ key: 'ms', label: '毫秒', type: 'number' }],
+  scroll: [{ key: 'dx', label: '横向Δpx', type: 'number' }, { key: 'dy', label: '纵向Δpx', type: 'number' }],
   set_var: [{ key: 'name', label: '变量名' }, { key: 'value', label: '值' }],
   assert_text: [{ key: 'text', label: '期望文本' }, { key: 'mode', label: '模式(equals/contains)' }],
 }
@@ -185,6 +192,21 @@ const description = ref(props.scriptRow?.description ?? '')
 // props 经 reactive 代理,直接 structuredClone 会报 DataCloneError,先 toRaw 落回原始对象
 const doc = ref<UiScriptDoc>(cloneDoc(props.scriptRow))
 const saving = ref(false)
+
+// 执行默认登录态:录制时写入 meta.auth_state_id,此处可变更/清除(拍板:执行不询问,编辑页为变更入口)
+const authStates = ref<UiAuthState[]>([])
+const authSel = ref<number | ''>(doc.value.meta?.auth_state_id ?? '')
+onMounted(async () => {
+  try {
+    authStates.value = await listUiAuthStates(props.projectId)
+  } catch {
+    authStates.value = [] // 拉不到不阻塞编辑,仅无可选项
+  }
+  // 录制时选的登录态已被删除:回退「不使用」,保存即清除该 meta 键
+  if (authSel.value !== '' && !authStates.value.some((a) => a.id === authSel.value)) {
+    authSel.value = ''
+  }
+})
 
 function cloneDoc(row: UiScript | null): UiScriptDoc {
   const src = row?.script ?? { version: 1, meta: { start_url: '' }, variables: [], steps: [] }
@@ -237,6 +259,11 @@ async function save() {
   if (!name.value.trim()) { ElMessage.warning('请填写脚本名'); return }
   saving.value = true
   try {
+    // 登录态归一化:「不使用」清除 meta 键;选了则写入(后端 validate_script 对 meta 透传)
+    if (doc.value.meta) {
+      if (authSel.value === '') delete doc.value.meta.auth_state_id
+      else doc.value.meta.auth_state_id = authSel.value
+    }
     const body = {
       name: name.value.trim(),
       description: description.value.trim() || null,

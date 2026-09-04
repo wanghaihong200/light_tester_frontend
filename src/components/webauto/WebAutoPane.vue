@@ -4,6 +4,10 @@
       <el-button type="primary" @click="onRecord">新建录制</el-button>
       <el-button @click="onNewBlank">新建空脚本</el-button>
       <el-button @click="showAuth = true">登录态管理</el-button>
+      <el-radio-group v-model="runMode" size="small" class="mode-switch">
+        <el-radio-button value="headless">无头执行</el-radio-button>
+        <el-radio-button value="headed">有头执行</el-radio-button>
+      </el-radio-group>
       <el-button :disabled="selected.length === 0" type="success" @click="onBatchRun">
         批量执行({{ selected.length }})
       </el-button>
@@ -31,7 +35,11 @@
       </el-table-column>
     </el-table>
 
-    <RecorderPanel v-if="recording" :project-id="projectId" @saved="onSaved" @closed="recording = false" />
+    <RecorderPanel
+      v-if="recording" :project-id="projectId"
+      :auth-state-id="recAuthId === '' ? undefined : recAuthId"
+      @saved="onSaved" @closed="recording = false"
+    />
     <ScriptEditor v-if="editing" :project-id="projectId" :script-row="editing" @saved="onSaved" @closed="editing = null" />
     <RunDialog
       v-if="runQueue.length || history"
@@ -41,14 +49,30 @@
       @closed="closeRunDialog"
     />
     <AuthStatesPane v-if="showAuth" :project-id="projectId" @closed="showAuth = false" />
+
+    <!-- 录制入口登录态选择:项目存在登录态时先选再进录制面板(无登录态直接开录不打扰) -->
+    <el-dialog v-model="showRecAuth" title="开始录制" width="440" :close-on-click-modal="false">
+      <div class="rec-auth-form">
+        <span class="label">登录态</span>
+        <el-select v-model="recAuthId" class="sel" placeholder="不使用">
+          <el-option label="不使用" value="" />
+          <el-option v-for="a in recAuthStates" :key="a.id" :label="a.name" :value="a.id" />
+        </el-select>
+      </div>
+      <div class="rec-auth-tip">选择已保存的登录态后,录制浏览器将以该身份打开页面;不使用则录制里需自行登录。</div>
+      <template #footer>
+        <el-button @click="showRecAuth = false">取消</el-button>
+        <el-button type="primary" @click="confirmRecAuth">开始录制</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { onMounted, ref } from 'vue'
-import { createUiScript, deleteUiScript, listUiRuns, listUiScripts } from '../../api/uiAutomation'
-import type { UiRun, UiScript } from '../../types'
+import { createUiScript, deleteUiScript, listUiAuthStates, listUiRuns, listUiScripts } from '../../api/uiAutomation'
+import type { UiAuthState, UiRun, UiScript } from '../../types'
 import AuthStatesPane from './AuthStatesPane.vue'
 import RecorderPanel from './RecorderPanel.vue'
 import RunDialog from './RunDialog.vue'
@@ -79,12 +103,38 @@ async function reload() {
 onMounted(reload)
 
 function onSelectionChange(rows: UiScript[]) { selected.value = rows }
-function onRecord() { recording.value = true }
+
+// 录制入口:先看项目有无登录态——有则弹选择框(默认「不使用」)再进录制面板,
+// 无则直接开录(与 RunDialog「拉不到登录态不阻塞」同口径,失败也直开)
+const recAuthId = ref<number | ''>('')
+const showRecAuth = ref(false)
+const recAuthStates = ref<UiAuthState[]>([])
+
+async function onRecord() {
+  try {
+    recAuthStates.value = await listUiAuthStates(props.projectId)
+  } catch {
+    recAuthStates.value = []
+  }
+  if (recAuthStates.value.length === 0) {
+    recording.value = true
+    return
+  }
+  recAuthId.value = ''
+  showRecAuth.value = true
+}
+
+function confirmRecAuth() {
+  showRecAuth.value = false
+  recording.value = true
+}
 function onEdit(row: UiScript) { editing.value = row }
 // 执行队列与历史模式互斥:RunDialog 只吃其中一路,开一路时清掉另一路
-function onRun(row: UiScript) { runQueue.value = [{ script: row, mode: 'headless' }]; history.value = null }
+// 执行方式(无头/有头)由工具栏切换统一决定,单脚本执行与批量共用
+const runMode = ref<'headless' | 'headed'>('headless')
+function onRun(row: UiScript) { runQueue.value = [{ script: row, mode: runMode.value }]; history.value = null }
 function onBatchRun() {
-  runQueue.value = selected.value.map((s) => ({ script: s, mode: 'headless' as const }))
+  runQueue.value = selected.value.map((s) => ({ script: s, mode: runMode.value }))
   history.value = null
 }
 async function onHistory(row: UiScript) {
@@ -151,6 +201,27 @@ function formatTime(iso: string): string {
 .toolbar {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 4px;
+}
+.mode-switch {
+  margin: 0 6px;
+}
+.rec-auth-form {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.rec-auth-form .label {
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+}
+.rec-auth-form .sel {
+  flex: 1;
+}
+.rec-auth-tip {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--pro-muted);
 }
 </style>
