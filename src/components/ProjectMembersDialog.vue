@@ -25,15 +25,8 @@
 
     <!-- 底部添加行:viewer 可读列表,但添加/改角色/移除由后端 owner 闸拦截,403 detail 直接透出 -->
     <div class="add-row">
-      <el-input
-        v-model="addName"
-        class="add-name"
-        size="small"
-        maxlength="64"
-        placeholder="用户名"
-        data-test="add-username"
-        @keyup.enter="onAdd"
-      />
+      <!-- 用户名改为模糊搜索选择(Task 3 UserSearchSelect,v-model=username),避免手输用户名 404 -->
+      <UserSearchSelect v-model="addName" class="add-name" style="width: 100%" />
       <el-select v-model="addRole" class="add-role" size="small" data-test="add-role">
         <el-option v-for="r in ROLES" :key="r" :label="ROLE_LABEL[r]" :value="r" />
       </el-select>
@@ -46,6 +39,7 @@
 import { ElMessage } from 'element-plus'
 import { ref, watch } from 'vue'
 import { membersApi, type MemberInfo, type MemberRole } from '../api/members'
+import UserSearchSelect from './UserSearchSelect.vue'
 
 const props = defineProps<{ visible: boolean; projectId: number }>()
 const emit = defineEmits<{ 'update:visible': [boolean]; changed: [] }>()
