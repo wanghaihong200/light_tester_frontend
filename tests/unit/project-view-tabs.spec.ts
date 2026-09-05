@@ -10,8 +10,9 @@ vi.mock('../../src/api/projects', () => ({
   ]),
 }))
 
-// 四个子面板各自拉数据,与本用例无关,全部桩掉
-const stubs = { MindmapPane: true, DocumentsPane: true, JobsPane: true, RepoPane: true }
+// 四个子面板各自拉数据,与本用例无关,全部桩掉;成员弹窗含 el-table 作用域插槽,
+// 本用例不装 Element Plus(裸渲染会触发插槽解构报错),同样桩掉
+const stubs = { MindmapPane: true, DocumentsPane: true, JobsPane: true, RepoPane: true, ProjectMembersDialog: true }
 
 async function mountAt(path: string) {
   const router = createRouter({

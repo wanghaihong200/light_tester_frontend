@@ -1,4 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
+import { useAuth } from '../composables/useAuth'
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -23,6 +24,12 @@ const router = createRouter({
           name: 'project-detail',
           component: () => import('../views/ProjectView.vue'),
         },
+        {
+          path: 'users',
+          name: 'users',
+          component: () => import('../views/UsersView.vue'),
+          meta: { requiresAdmin: true },
+        },
       ],
     },
   ],
@@ -32,6 +39,10 @@ const router = createRouter({
 router.beforeEach((to) => {
   if (to.name === 'login') return true
   if (!localStorage.getItem('tt_token')) return { name: 'login' }
+  // requiresAdmin 第一层:user 已加载且非 admin → 同步拦回首页。刷新直达时 fetchMe 尚未返回、
+  // user 为空无法判定,此处不放异步守卫(避免 admin 被误踢),放行交由 UsersView 自检兜底
+  const { user } = useAuth()
+  if (to.meta.requiresAdmin && user.value && !user.value.is_admin) return { name: 'home' }
   return true
 })
 

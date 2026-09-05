@@ -4,6 +4,16 @@
       <div class="panel-head">
         <h3 class="panel-title">{{ project?.name ?? (loaded ? '项目不存在' : '加载中…') }}</h3>
         <span v-if="project?.description" class="panel-desc">{{ project.description }}</span>
+        <!-- 成员按钮对所有人可见:viewer 也能读成员列表,变更操作由后端 owner 闸拦截 -->
+        <el-button
+          v-if="project"
+          class="members-btn"
+          size="small"
+          data-test="members-btn"
+          @click="membersVisible = true"
+        >
+          成员
+        </el-button>
       </div>
       <el-tabs v-model="tab" class="tabs">
         <el-tab-pane label="用例导图" name="mindmap">
@@ -23,6 +33,7 @@
         </el-tab-pane>
       </el-tabs>
     </div>
+    <ProjectMembersDialog v-if="project" :visible="membersVisible" :project-id="project.id" @update:visible="membersVisible = $event" />
   </div>
 </template>
 
@@ -33,6 +44,7 @@ import { useRoute } from 'vue-router'
 import DocumentsPane from '../components/DocumentsPane.vue'
 import JobsPane from '../components/JobsPane.vue'
 import MindmapPane from '../components/MindmapPane.vue'
+import ProjectMembersDialog from '../components/ProjectMembersDialog.vue'
 import RepoPane from '../components/RepoPane.vue'
 import WebAutoPane from '../components/webauto/WebAutoPane.vue'
 import { listProjects } from '../api/projects'
@@ -44,6 +56,7 @@ const { openProject } = useTabs()
 const project = ref<Project | null>(null)
 const loaded = ref(false)
 const tab = ref('mindmap')
+const membersVisible = ref(false)
 const mindmapKey = ref(0)
 const mindmapDirty = ref(false)
 
@@ -109,6 +122,9 @@ onMounted(async () => {
 .panel-desc {
   color: var(--el-text-color-secondary);
   font-size: 12px;
+}
+.members-btn {
+  margin-left: auto;
 }
 .tabs {
   display: flex;
