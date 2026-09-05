@@ -45,11 +45,23 @@ function tableRows(): HTMLElement[] {
   return [...dialogEl().querySelectorAll('.el-table__body-wrapper tbody tr')]
 }
 
-// 按项目名找行内 select 的组件实例(驱动草稿角色,同 project-members-dialog.spec 的 add-role 驱动方式)
+// 按项目名找行内 select 组件实例(单表里每行一个 role-select,经 data-project-id 对应)
+function selectOf(w: Awaited<ReturnType<typeof mountDialog>>, projectName: string) {
+  const pid = tableRows()
+    .find((r) => r.textContent?.includes(projectName))!
+    .querySelector('[data-test="role-select"]')!
+    .getAttribute('data-project-id')
+  return w.findAllComponents({ name: 'ElSelect' }).find((c) => c.attributes('data-project-id') === pid)!
+}
+
+// select 当前显示值(父组件 :model-value 的实际取值)
+function selectValue(w: Awaited<ReturnType<typeof mountDialog>>, projectName: string) {
+  return selectOf(w, projectName).props('modelValue')
+}
+
+// 驱动行内 select 改值(emit update:modelValue → onRoleInput:未授权行落草稿 / 已授权行走 onRoleChange)
 async function setRowDraft(w: Awaited<ReturnType<typeof mountDialog>>, projectName: string, role: string) {
-  const idx = tableRows().findIndex((r) => r.textContent?.includes(projectName))
-  const select = w.findAllComponents({ name: 'ElSelect' }).find((c) => c.attributes('data-project-id') === String(PROJECTS[idx].id))!
-  await select.vm.$emit('update:modelValue', role)
+  await selectOf(w, projectName).vm.$emit('update:modelValue', role)
   await flushPromises()
 }
 
@@ -113,14 +125,17 @@ describe('UserProjectsDialog 用户项目授权弹窗', () => {
     w.unmount()
   })
 
-  it('已授权行改角色:changeRole 收到 (project_id, userId, role),成功后重拉并 emit changed', async () => {
-    mockData()
+  it('已授权行改角色(走行内 select 真实路径):changeRole 收到 (project_id, userId, role),成功后重拉并显示新角色', async () => {
+    // 首次拉取授权为 owner,changeRole 成功重拉后返回 editor
+    mocks.projects
+      .mockResolvedValueOnce(GRANTED)
+      .mockResolvedValueOnce([{ project_id: 1, project_name: 'alpha', role: 'editor' }])
+    mocks.listProjects.mockResolvedValue(PROJECTS)
     const w = await mountDialog()
-    const row = (w.vm as any).rows[0]
-    mocks.projects.mockClear()
-    await (w.vm as any).onRoleChange(row, 'viewer')
-    expect(mocks.changeRole).toHaveBeenCalledWith(1, USER_ID, 'viewer') // 第二参=本弹窗用户
-    expect(mocks.projects).toHaveBeenCalledTimes(1) // 成功后重拉
+    await setRowDraft(w, 'alpha', 'editor') // onRoleInput → 已授权分支 → onRoleChange
+    expect(mocks.changeRole).toHaveBeenCalledWith(1, USER_ID, 'editor') // 第二参=本弹窗用户
+    expect(mocks.projects).toHaveBeenCalledTimes(2) // 成功后重拉授权列表
+    expect(selectValue(w, 'alpha')).toBe('editor') // reload 后下拉显示新角色
     expect(w.emitted('changed')).toBeTruthy()
     w.unmount()
   })
@@ -137,16 +152,18 @@ describe('UserProjectsDialog 用户项目授权弹窗', () => {
     w.unmount()
   })
 
-  it('改角色被拒(409 末位 owner):透出后端 detail、行角色回滚、不重拉', async () => {
+  it('已授权行改角色被拒(409 末位 owner):透出后端 detail、下拉显示值回滚、不重拉', async () => {
     mockData()
     const errSpy = vi.spyOn(ElMessage, 'error')
     const w = await mountDialog()
     mocks.changeRole.mockRejectedValue(new ApiError(409, '项目至少需要一名 owner'))
-    const row = (w.vm as any).rows[0]
-    await (w.vm as any).onRoleChange(row, 'viewer')
+    await setRowDraft(w, 'alpha', 'viewer') // onRoleInput → 已授权分支 → onRoleChange
+    expect(mocks.changeRole).toHaveBeenCalledWith(1, USER_ID, 'viewer')
     expect(errSpy).toHaveBeenCalledWith('项目至少需要一名 owner')
-    expect(row.role).toBe('owner') // 回滚,不残留假角色
+    expect(selectValue(w, 'alpha')).toBe('owner') // 回滚:下拉显示值恢复原角色,不残留假角色
+    expect(tableRows()[0].textContent).toContain('owner')
     expect(w.emitted('changed')).toBeFalsy()
+    expect(mocks.projects).toHaveBeenCalledTimes(1) // 失败不重拉
     w.unmount()
   })
 

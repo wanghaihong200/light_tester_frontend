@@ -26,7 +26,7 @@
     <!-- 底部添加行:viewer 可读列表,但添加/改角色/移除由后端 owner 闸拦截,403 detail 直接透出 -->
     <div class="add-row">
       <!-- 用户名改为模糊搜索选择(Task 3 UserSearchSelect,v-model=username),避免手输用户名 404 -->
-      <UserSearchSelect v-model="addName" class="add-name" style="width: 100%" />
+      <UserSearchSelect v-model="addName" size="small" class="add-name" style="width: 100%" />
       <el-select v-model="addRole" class="add-role" size="small" data-test="add-role">
         <el-option v-for="r in ROLES" :key="r" :label="ROLE_LABEL[r]" :value="r" />
       </el-select>

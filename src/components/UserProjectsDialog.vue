@@ -92,6 +92,7 @@ async function reload() {
     const roleByPid = new Map<number, UserProjectRole['role']>(granted.map((g) => [g.project_id, g.role]))
     rows.value = projects.map((p) => ({ project_id: p.id, project_name: p.name, role: roleByPid.get(p.id) ?? null }))
     drafts.value = {}
+    filter.value = '' // 跨用户重开弹窗时清掉上一次的过滤条件
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '操作失败')
   } finally {
