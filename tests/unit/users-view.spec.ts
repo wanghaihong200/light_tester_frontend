@@ -4,12 +4,14 @@ import { createRouter, createMemoryHistory } from 'vue-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../src/api/client'
 import { resetAuth, useAuth } from '../../src/composables/useAuth'
+import UserProjectsDialog from '../../src/components/UserProjectsDialog.vue'
 import UsersView from '../../src/views/UsersView.vue'
 
-// mock api 层(usersApi + authApi.me,后者供 useAuth().fetchMe 补拉)
-const mocks = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), update: vi.fn(), me: vi.fn() }))
-vi.mock('../../src/api/users', () => ({ usersApi: { list: mocks.list, create: mocks.create, update: mocks.update } }))
+// mock api 层(usersApi + authApi.me,后者供 useAuth().fetchMe 补拉;projects/listProjects 供授权弹窗)
+const mocks = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), update: vi.fn(), me: vi.fn(), projects: vi.fn(), listProjects: vi.fn() }))
+vi.mock('../../src/api/users', () => ({ usersApi: { list: mocks.list, create: mocks.create, update: mocks.update, projects: mocks.projects } }))
 vi.mock('../../src/api/auth', () => ({ authApi: { login: vi.fn(), me: mocks.me } }))
+vi.mock('../../src/api/projects', () => ({ listProjects: mocks.listProjects }))
 
 const USERS = [
   { id: 1, username: 'admin', display_name: '管理员', is_admin: true, is_active: true },
@@ -47,6 +49,8 @@ describe('UsersView 用户管理页', () => {
     mocks.create.mockReset()
     mocks.update.mockReset()
     mocks.me.mockReset()
+    mocks.projects.mockReset()
+    mocks.listProjects.mockReset()
   })
 
   it('admin 进入:fetchMe 后拉取列表并渲染用户/操作', async () => {
@@ -117,6 +121,24 @@ describe('UsersView 用户管理页', () => {
     await flushPromises()
     expect(errSpy).toHaveBeenCalledWith('不能操作自己的账号')
     expect(mocks.list).toHaveBeenCalledTimes(2)
+    w.unmount()
+  })
+
+  it('项目权限:点击行内按钮打开授权弹窗,props 传该行用户 id/username', async () => {
+    localStorage.setItem('tt_token', 'jwt-1')
+    mocks.me.mockResolvedValue(me())
+    mocks.list.mockResolvedValue(USERS)
+    mocks.projects.mockResolvedValue([])
+    mocks.listProjects.mockResolvedValue([]) // 弹窗 visible→true 会并行拉授权+全量项目
+    const { w } = await mountView()
+    await w.findAll('[data-test="assign-perm"]')[1].trigger('click') // wang(id=2)行
+    await flushPromises()
+    const dlg = w.findComponent(UserProjectsDialog)
+    expect(dlg.exists()).toBe(true)
+    expect(dlg.props('userId')).toBe(2)
+    expect(dlg.props('username')).toBe('wang')
+    expect(dlg.props('visible')).toBe(true)
+    expect(mocks.projects).toHaveBeenCalledWith(2)
     w.unmount()
   })
 

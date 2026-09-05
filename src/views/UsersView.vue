@@ -18,7 +18,7 @@
             <el-tag :type="row.is_active ? 'success' : 'warning'" size="small">{{ row.is_active ? '启用' : '禁用' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180">
+        <el-table-column label="操作" width="250">
           <template #default="{ row }">
             <el-button link type="primary" data-test="reset-pwd" @click="onResetPwd(row)">重置密码</el-button>
             <el-button
@@ -29,6 +29,7 @@
             >
               {{ row.is_active ? '禁用' : '启用' }}
             </el-button>
+            <el-button link type="primary" data-test="assign-perm" @click="openPerms(row)">项目权限</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -57,6 +58,16 @@
         <el-button type="primary" :loading="saving" data-test="create-save" @click="save">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- 项目授权弹窗:行内「项目权限」打开;changed 暂无派生状态,绑定为空操作保留契约 -->
+    <UserProjectsDialog
+      v-if="permUser"
+      :user-id="permUser.id"
+      :username="permUser.username"
+      :visible="permVisible"
+      @update:visible="permVisible = $event"
+      @changed="() => {}"
+    />
   </div>
 </template>
 
@@ -67,6 +78,7 @@ import { useRouter } from 'vue-router'
 import type { UserInfo } from '../api/auth'
 import { usersApi, type UserUpdateInput } from '../api/users'
 import { useAuth } from '../composables/useAuth'
+import UserProjectsDialog from '../components/UserProjectsDialog.vue'
 
 const router = useRouter()
 const { user, isAdmin, fetchMe } = useAuth()
@@ -75,6 +87,13 @@ const loading = ref(false)
 const createVisible = ref(false)
 const saving = ref(false)
 const form = ref({ username: '', display_name: '', password: '' })
+const permUser = ref<UserInfo | null>(null)
+const permVisible = ref(false)
+
+function openPerms(row: UserInfo) {
+  permUser.value = row
+  permVisible.value = true
+}
 
 async function load() {
   loading.value = true

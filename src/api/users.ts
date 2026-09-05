@@ -23,9 +23,21 @@ export interface UserSearchItem {
   display_name: string
 }
 
+// 角色口径与 members.MemberRole 一致(此处独立声明,避免 users→members 运行时依赖)
+export type Role = 'owner' | 'editor' | 'viewer'
+
+/** 对齐后端 UserProjectRole(schemas_auth.py)。 */
+export interface UserProjectRole {
+  project_id: number
+  project_name: string
+  role: Role
+}
+
 export const usersApi = {
   list: () => http.get<UserInfo[]>('/users'),
   create: (body: UserCreateInput) => http.post<UserInfo>('/users', body),
   update: (id: number, body: UserUpdateInput) => http.put<UserInfo>(`/users/${id}`, body),
   search: (q: string) => http.get<UserSearchItem[]>(`/users/search?q=${encodeURIComponent(q)}&limit=20`),
+  /** 管理员查某用户的项目授权(按项目名排序) */
+  projects: (userId: number) => http.get<UserProjectRole[]>(`/users/${userId}/projects`),
 }
