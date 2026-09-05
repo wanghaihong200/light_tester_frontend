@@ -16,8 +16,16 @@ export type UserUpdateInput = {
   is_active?: boolean
 }
 
+/** 对齐后端 UserSearchItem(schemas_auth.py):搜索选人用,仅 3 字段。 */
+export interface UserSearchItem {
+  id: number
+  username: string
+  display_name: string
+}
+
 export const usersApi = {
   list: () => http.get<UserInfo[]>('/users'),
   create: (body: UserCreateInput) => http.post<UserInfo>('/users', body),
   update: (id: number, body: UserUpdateInput) => http.put<UserInfo>(`/users/${id}`, body),
+  search: (q: string) => http.get<UserSearchItem[]>(`/users/search?q=${encodeURIComponent(q)}&limit=20`),
 }
