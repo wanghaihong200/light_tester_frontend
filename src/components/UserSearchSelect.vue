@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ElMessage } from 'element-plus'
 import { ref } from 'vue'
 import { usersApi, type UserSearchItem } from '../api/users'
 
@@ -12,6 +13,9 @@ async function remoteMethod(q: string) {
   loading.value = true
   try {
     options.value = await usersApi.search(q)
+  } catch (e) {
+    options.value = [] // 清掉过期选项,避免残留误导
+    ElMessage.error(e instanceof Error ? e.message : '搜索失败')
   } finally {
     loading.value = false
   }

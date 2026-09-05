@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
+import ElementPlus, { ElMessage } from 'element-plus'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ApiError } from '../../src/api/client'
 import UserSearchSelect from '../../src/components/UserSearchSelect.vue'
 
 // mock api 层:捕获入参、控制返回(el-select 遥控搜索走 usersApi.search)
@@ -52,6 +53,21 @@ describe('UserSearchSelect 用户搜索下拉', () => {
       .click()
     await flushPromises()
     expect(w.emitted('update:modelValue')).toEqual([['alice']])
+    w.unmount()
+  })
+
+  it('搜索失败:清掉过期选项并 ElMessage.error 透出后端 detail', async () => {
+    const errSpy = vi.spyOn(ElMessage, 'error')
+    mocks.search.mockResolvedValueOnce(RESULTS)
+    const w = await mountSelect()
+    await (w.vm as any).remoteMethod('ali')
+    await flushPromises()
+    expect(optionLabels()).toHaveLength(2)
+    mocks.search.mockRejectedValueOnce(new ApiError(500, '搜索失败'))
+    await (w.vm as any).remoteMethod('bob')
+    await flushPromises()
+    expect(errSpy).toHaveBeenCalledWith('搜索失败')
+    expect(optionLabels()).toEqual([]) // 旧选项不残留
     w.unmount()
   })
 })
