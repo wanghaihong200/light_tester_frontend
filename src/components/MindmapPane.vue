@@ -73,6 +73,7 @@ import { ElMessage } from 'element-plus'
 import { computed, onMounted, ref } from 'vue'
 import { canAddChild, findNodeMeta, toMindmapData, type MindmapNode, type NodeType } from '../adapters/tree'
 import { createCase } from '../api/cases'
+import { downloadFile } from '../api/client'
 import { createFeaturePoint, createModule, fetchTree } from '../api/tree'
 import type { Priority } from '../types'
 import MindmapEditor from './MindmapEditor.vue'
@@ -186,12 +187,21 @@ async function submitAdd() {
   }
 }
 
-function exportXmind() {
-  window.open(`/api/projects/${props.projectId}/export/xmind`) // dev 下走 vite proxy,Disposition 触发下载
+// 后端 401 门禁后 window.open 直链带不了 Authorization:经 http 客户端 fetch→blob 触发下载(文件名取响应头 filename*)
+async function exportXmind() {
+  try {
+    await downloadFile(`/projects/${props.projectId}/export/xmind`, `${props.projectId}.xmind`)
+  } catch (e) {
+    ElMessage.error(`导出失败:${(e as Error).message}`)
+  }
 }
 
-function exportExcel() {
-  window.open(`/api/projects/${props.projectId}/export/excel`) // dev 下走 vite proxy,Disposition 触发下载
+async function exportExcel() {
+  try {
+    await downloadFile(`/projects/${props.projectId}/export/excel`, `${props.projectId}.xlsx`)
+  } catch (e) {
+    ElMessage.error(`导出失败:${(e as Error).message}`)
+  }
 }
 </script>
 

@@ -30,6 +30,7 @@
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { UploadRequestOptions } from 'element-plus'
 import { onMounted, ref } from 'vue'
+import { downloadFile } from '../api/client'
 import { deleteDocument, listDocuments, uploadDocument } from '../api/documents'
 import type { DocumentItem } from '../types'
 
@@ -64,8 +65,13 @@ async function doUpload(options: UploadRequestOptions) {
   }
 }
 
-function download(row: DocumentItem) {
-  window.open(`/api/documents/${row.id}/download`)
+// 后端 401 门禁后 window.open 直链带不了 Authorization:经 http 客户端 fetch→blob 触发下载
+async function download(row: DocumentItem) {
+  try {
+    await downloadFile(`/documents/${row.id}/download`, row.filename)
+  } catch (e) {
+    ElMessage.error(`下载失败:${(e as Error).message}`)
+  }
 }
 
 async function remove(row: DocumentItem) {

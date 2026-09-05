@@ -33,6 +33,19 @@ vi.mock('../../src/api/uiAutomation', async (orig) => ({
 
 import RunDialog from '../../src/components/webauto/RunDialog.vue'
 
+// 截图改走鉴权 blob(fetch→objectURL):替身 fetch 返回图片流,替身 objectURL 可断言(键序即调用序)
+const origObjectUrls = { create: URL.createObjectURL, revoke: URL.revokeObjectURL }
+function stubShotFetch() {
+  let seq = 0
+  const create = vi.fn(() => `blob:shot-${++seq}`)
+  const revoke = vi.fn()
+  Object.defineProperty(URL, 'createObjectURL', { value: create, configurable: true, writable: true })
+  Object.defineProperty(URL, 'revokeObjectURL', { value: revoke, configurable: true, writable: true })
+  const fn = vi.fn(async () => new Response(new Blob(['jpg'], { type: 'image/jpeg' }), { status: 200 }))
+  vi.stubGlobal('fetch', fn)
+  return { fn, create, revoke }
+}
+
 function mkScript(opts: {
   id?: number; name?: string
   variables?: UiScript['script']['variables']; steps?: UiScript['script']['steps']
@@ -86,9 +99,21 @@ describe('RunDialog', () => {
   })
   afterEach(() => {
     vi.useRealTimers()
+    vi.unstubAllGlobals()
+    Object.defineProperty(URL, 'createObjectURL', {
+      value: origObjectUrls.create,
+      configurable: true,
+      writable: true,
+    })
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      value: origObjectUrls.revoke,
+      configurable: true,
+      writable: true,
+    })
   })
 
   it('执行流:index=-1 显示启动浏览器占位,step_end 原位更新并渲染错误与截图', async () => {
+    const shots = stubShotFetch() // 截图经鉴权 blob 加载:fetch /api/ui-runs/5/screens/* → objectURL
     const s = mkScript({ steps: [{ id: 's2', action: 'assert_text', params: { text: '欢迎' } }] })
     const w = mountDialog({ projectId: 1, queue: [{ script: s, mode: 'headless' }] })
     await flushPromises()
@@ -103,7 +128,8 @@ describe('RunDialog', () => {
     await flushPromises()
     expect(w.text()).toContain('启动浏览器')
     expect(w.text()).toContain('元素不存在: #x')
-    expect(w.html()).toContain('/api/ui-runs/5/screens/step_0_failed.jpg')
+    expect(shots.fn.mock.calls[0][0]).toBe('/api/ui-runs/5/screens/step_0_failed.jpg') // 带鉴权取流
+    expect(w.html()).toContain('blob:shot-1') // 缩略图渲染的是 objectURL
     expect(w.findAll('.log-row').length).toBe(2) // 占位行 + 真实步骤行,同 index 不重复建行
     expect(w.find('.frame-badge').text()).toBe('第 1 步') // 帧角标标注当前画面所属步骤
   })
@@ -141,7 +167,8 @@ describe('RunDialog', () => {
     expect(w.text()).toContain('第 2/2 个:脚本乙') // 队列头部推进到下一个
   })
 
-  it('历史模式:左侧 run 列表点选切换,渲染 step_results 与截图 URL,失败步骤整行红标', async () => {
+  it('历史模式:左侧 run 列表点选切换,渲染 step_results 与截图(blob objectURL),失败步骤整行红标', async () => {
+    const shots = stubShotFetch()
     const r1 = mkRun()
     const r2 = mkRun({
       id: 6,
@@ -154,22 +181,24 @@ describe('RunDialog', () => {
       ],
     })
     const w = mountDialog({ projectId: 1, queue: [], history: { script: mkScript(), runs: [r1, r2] } })
-    await flushPromises() // el-dialog 内容在 open 后才渲染
+    await flushPromises() // el-dialog 内容在 open 后才渲染;截图 fetch→objectURL 也已落定
     expect(w.text()).toContain('执行历史 · 冒烟脚本')
     expect(w.text()).toContain('文本不匹配') // 默认选中第一条,直接可看步骤详情
-    expect(w.html()).toContain('/api/ui-runs/5/screens/step_1_failed.jpg')
+    expect(shots.fn.mock.calls.map((c) => c[0])).toEqual([
+      '/api/ui-runs/5/screens/step_0_passed.jpg',
+      '/api/ui-runs/5/screens/step_1_failed.jpg',
+    ])
     expect(w.findAll('.row-failed').length).toBe(1) // 失败步骤红标
-    // 功能2:每张缩略图的预览列表 = 该 run 全部截图(2 张),查看器内可前后切换
+    // 功能2:每张缩略图的预览列表 = 该 run 全部截图(2 张,objectURL),查看器内可前后切换
     for (const img of w.findAllComponents({ name: 'ElImage' })) {
-      expect(img.props('previewSrcList')).toEqual([
-        '/api/ui-runs/5/screens/step_0_passed.jpg',
-        '/api/ui-runs/5/screens/step_1_failed.jpg',
-      ])
+      expect(img.props('previewSrcList')).toEqual(['blob:shot-1', 'blob:shot-2'])
     }
 
     await w.findAll('.run-item')[1].trigger('click') // 点选第二条 → 切换渲染该 run 的结果
+    await flushPromises() // run 6 截图 fetch→objectURL 异步落定后再断言
     expect(w.text()).toContain('fill')
-    expect(w.html()).toContain('/api/ui-runs/6/screens/step_0_passed.jpg')
+    expect(w.html()).toContain('blob:shot-3') // run 6 的截图另取流
+    expect(shots.fn).toHaveBeenCalledWith('/api/ui-runs/6/screens/step_0_passed.jpg', expect.anything())
     expect(w.findAll('.row-failed').length).toBe(0)
   })
 

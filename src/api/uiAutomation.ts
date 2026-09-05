@@ -1,7 +1,7 @@
 import type {
   UiAuthState, UiRun, UiScript, UiScriptDoc, UiStep, UiVariable,
 } from '../types'
-import { http } from './client'
+import { http, withSseToken } from './client'
 
 // 脚本 CRUD
 export function listUiScripts(projectId: number) {
@@ -68,9 +68,9 @@ export function cancelAuthCollect(collectId: number) {
   return http.post<void>(`/ui-auth-collect/${collectId}/cancel`)
 }
 
-// 通用 SSE 订阅(录制流与执行流同构)
+// 通用 SSE 订阅(录制流与执行流同构;EventSource 带不了 Authorization,经 query token 鉴权)
 function subscribeSse(url: string, onEvent: (e: Record<string, unknown>) => void): () => void {
-  const es = new EventSource(url)
+  const es = new EventSource(withSseToken(url))
   let closed = false
   es.onmessage = (ev) => {
     if (closed) return

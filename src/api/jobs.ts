@@ -1,5 +1,5 @@
 import type { GenerationJob, SSEEvent, StagingResponse } from '../types'
-import { http } from './client'
+import { http, withSseToken } from './client'
 
 // 创建生成任务(模块三选一:选中 id / 手输名字 / 留空)
 export function createJob(projectId: number, payload: { documentId: number; targetModuleId?: number; targetModuleName?: string; jobType?: 'case_generation' | 'api_generation'; userPrompt?: string }) {
@@ -36,9 +36,9 @@ export function rejectStaged(id: number) {
   return http.del(`/staged/${id}`)
 }
 
-// 订阅任务 SSE 事件流
+// 订阅任务 SSE 事件流(EventSource 带不了 Authorization,经 query token 鉴权)
 export function subscribeJobEvents(jobId: number, onEvent: (e: SSEEvent) => void): () => void {
-  const es = new EventSource(`/api/jobs/${jobId}/events`)
+  const es = new EventSource(withSseToken(`/api/jobs/${jobId}/events`))
   let closed = false
 
   es.onmessage = (event) => {

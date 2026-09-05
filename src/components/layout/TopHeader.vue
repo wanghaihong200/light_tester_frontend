@@ -8,12 +8,31 @@
         <span class="crumb-current">{{ projectName }}</span>
       </template>
     </nav>
+    <!-- 右侧用户区:用户管理入口仅管理员可见(#/users 路由由用户管理任务落地) -->
+    <div v-if="user" class="user-area">
+      <a v-if="isAdmin" class="admin-link" href="#/users" data-test="admin-link">用户管理</a>
+      <span class="user-name" data-test="user-name">{{ user.display_name }}</span>
+      <el-button link size="small" data-test="logout" @click="logout">退出</el-button>
+    </div>
   </header>
 </template>
 
 <script setup lang="ts">
+import { onMounted } from 'vue'
+import { useAuth } from '../../composables/useAuth'
+
 defineProps<{ projectName?: string; collapsed: boolean }>()
 const emit = defineEmits<{ (e: 'navigate', path: string): void; (e: 'toggle-collapse'): void }>()
+
+const { user, isAdmin, fetchMe, logout } = useAuth()
+// 拉取失败不阻塞布局(同 SideMenu 容错);未登录 401 已由 client 统一踢登录
+onMounted(async () => {
+  try {
+    await fetchMe()
+  } catch {
+    /* 忽略 */
+  }
+})
 </script>
 
 <style scoped>
@@ -51,5 +70,23 @@ const emit = defineEmits<{ (e: 'navigate', path: string): void; (e: 'toggle-coll
 .crumb-current {
   color: var(--el-text-color-primary);
   font-weight: 600;
+}
+.user-area {
+  align-items: center;
+  display: flex;
+  font-size: 13px;
+  gap: 12px;
+  margin-left: auto;
+}
+.admin-link {
+  color: var(--pro-muted);
+  cursor: pointer;
+  text-decoration: none;
+}
+.admin-link:hover {
+  color: var(--el-color-primary);
+}
+.user-name {
+  color: var(--el-text-color-primary);
 }
 </style>

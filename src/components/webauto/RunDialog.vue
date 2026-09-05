@@ -160,6 +160,7 @@
 //  - history 模式:只读回看历史执行,点选左侧 run 渲染每步结果与截图,无 SSE。
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { fetchBlobUrl } from '../../api/client'
 import { createUiRun, forceFinishRun, listUiAuthStates, subscribeRunEvents } from '../../api/uiAutomation'
 import type { UiAuthState, UiRun, UiScript, UiStep, UiStepResult } from '../../types'
 
@@ -427,11 +428,31 @@ function onClose() {
   emit('closed')
 }
 
+// ── 截图鉴权加载:后端 401 门禁后 <img>/el-image 直链带不了 Authorization,
+//    改 fetch→blob objectURL 渲染(键 runId/file,同图只取一次,卸载统一 revoke)──
+const shotUrls = ref<Record<string, string>>({})
+const shotPending = new Set<string>()
+
+async function loadShot(runId: number, file: string): Promise<void> {
+  const key = `${runId}/${file}`
+  if (shotUrls.value[key] || shotPending.has(key)) return
+  shotPending.add(key)
+  try {
+    shotUrls.value[key] = await fetchBlobUrl(`/ui-runs/${runId}/screens/${file}`)
+  } catch {
+    /* 404/401:缩略图留空,不打断执行/回看页 */
+  }
+}
+
 function shotUrl(file: string): string {
-  return selectedRun.value ? `/api/ui-runs/${selectedRun.value.id}/screens/${file}` : ''
+  if (!selectedRun.value) return ''
+  void loadShot(selectedRun.value.id, file)
+  return shotUrls.value[`${selectedRun.value.id}/${file}`] ?? ''
 }
 function runShotUrl(file: string): string {
-  return running.value ? `/api/ui-runs/${running.value.id}/screens/${file}` : ''
+  if (!running.value) return ''
+  void loadShot(running.value.id, file)
+  return shotUrls.value[`${running.value.id}/${file}`] ?? ''
 }
 
 // 大图查看器的完整截图列表:el-image 以点击项在列表中的位置为起点,前后箭头跨步切换
@@ -441,7 +462,10 @@ const runShots = computed(() =>
   logs.value.filter((l) => l.screenshot).map((l) => runShotUrl(l.screenshot!)))
 
 if (props.queue.length) startQueue()
-onBeforeUnmount(abortAll)
+onBeforeUnmount(() => {
+  abortAll()
+  for (const url of Object.values(shotUrls.value)) URL.revokeObjectURL(url)
+})
 </script>
 
 <style scoped>
